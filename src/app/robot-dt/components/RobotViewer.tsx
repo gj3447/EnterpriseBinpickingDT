@@ -1,44 +1,50 @@
 "use client";
 
-import * as THREE from 'three';
-import { Suspense } from 'react';
+import { Suspense, useState, useEffect } from 'react';
 import { Canvas, useLoader } from '@react-three/fiber';
-import { OrbitControls, Html } from '@react-three/drei';
+import { OrbitControls } from '@react-three/drei';
 import URDFLoader, { URDFRobot } from 'urdf-loader';
 import { ColladaLoader } from 'three-stdlib';
+import useWebSocket from 'react-use-websocket';
+import * as THREE from 'three';
 
-function RobotModel({ url }: { url: string }) {
-  const robot = useLoader(URDFLoader, url, (loader) => {
-    loader.packages = {
-        'dsr_description2': '/urdf/dsr_description2'
-    };
-    loader.loadMeshCb = (path, manager, onComplete) => {
-      const colladaLoader = new ColladaLoader(manager);
-      colladaLoader.load(
-        path,
-        (collada) => {
-          onComplete(collada.scene);
-        },
-        undefined,
-        (err) => {
-          console.error(`Failed to load mesh: ${path}`, err);
-          onComplete(new THREE.Group());
+import { WebsocketData } from '@/components/dt/types';
+import { Loader } from '@/components/dt/Loader';
+import { RobotScene } from '@/components/dt/RobotScene';
+
+function SceneContent() {
+    const [transformData, setTransformData] = useState<WebsocketData | null>(null);
+    const { lastJsonMessage } = useWebSocket('ws://192.168.0.196:52000/ws/transforms_robot', {
+        onOpen: () => console.log('WebSocket connection established.'),
+        onClose: () => console.log('WebSocket connection closed.'),
+        onError: (event) => console.error('WebSocket error:', event),
+        shouldReconnect: (closeEvent) => true,
+    });
+
+    useEffect(() => {
+        if (lastJsonMessage) {
+            setTransformData(lastJsonMessage as WebsocketData);
         }
-      );
-    };
-  }) as URDFRobot;
+    }, [lastJsonMessage]);
 
-  return <primitive object={robot} rotation={[-Math.PI / 2, 0, 0]} />;
-}
+    const robotModel = useLoader(URDFLoader as any, "/urdf/dsr_description2/urdf/a0509.urdf", (loader: any) => {
+        loader.packages = {
+            'dsr_description2': '/urdf/dsr_description2'
+        };
+        loader.loadMeshCb = (path: string, manager: THREE.LoadingManager, onComplete: (scene: THREE.Group) => void) => {
+            const colladaLoader = new ColladaLoader(manager);
+            colladaLoader.load(path, (collada) => onComplete(collada.scene as any), undefined, (err) => {
+                console.error(`Failed to load mesh: ${path}`, err);
+                onComplete(new THREE.Group());
+            });
+        };
+    }) as URDFRobot;
 
-function Loader() {
-    return (
-        <Html center>
-            <div className="text-lg text-gray-800 dark:text-gray-100 font-semibold">
-                로봇 모델을 불러오는 중...
-            </div>
-        </Html>
-    );
+    if (!transformData || !robotModel) {
+        return <Loader />;
+    }
+
+    return <RobotScene transformData={transformData} robotModel={robotModel} />;
 }
 
 export function RobotViewer() {
@@ -55,17 +61,12 @@ export function RobotViewer() {
             shadow-mapSize-height={2048}
         />
         <Suspense fallback={<Loader />}>
-            <RobotModel url="/urdf/dsr_description2/urdf/a0509.urdf" />
+            <SceneContent />
         </Suspense>
         <OrbitControls minDistance={0.5} maxDistance={5} />
         
-        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.01, 0]} receiveShadow>
-          <planeGeometry args={[20, 20]} />
-          <shadowMaterial opacity={0.3} />
-        </mesh>
         <gridHelper args={[20, 20]} />
       </Canvas>
     </div>
   );
 }
-

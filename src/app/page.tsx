@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Presentation, Bot, Grid } from 'lucide-react';
+import { Presentation, Bot, Grid, Camera } from 'lucide-react';
 
 export default function MainPage() {
   return (
@@ -47,6 +47,18 @@ export default function MainPage() {
               100개의 로봇으로 경로를 학습합니다.
             </p>
             <div className="absolute bottom-0 left-0 w-full h-1 bg-purple-500 transition-transform duration-300 scale-x-0 group-hover:scale-x-100"></div>
+          </div>
+        </Link>
+        <Link href="/image-viewer">
+          <div className="group relative w-72 h-80 bg-white dark:bg-gray-800 rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 flex flex-col items-center justify-center p-6 text-center cursor-pointer overflow-hidden">
+            <Camera className="w-20 h-20 text-red-500 mb-4 transition-transform duration-300 group-hover:scale-110" />
+            <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100 mb-2">
+              이미지 뷰어
+            </h2>
+            <p className="text-gray-600 dark:text-gray-400">
+              실시간 이미지 스트림을 확인합니다.
+            </p>
+            <div className="absolute bottom-0 left-0 w-full h-1 bg-red-500 transition-transform duration-300 scale-x-0 group-hover:scale-x-100"></div>
           </div>
         </Link>
       </div>

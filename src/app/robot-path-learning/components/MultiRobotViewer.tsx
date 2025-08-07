@@ -1,88 +1,92 @@
 "use client";
 
-import * as THREE from 'three';
-import { Suspense, useMemo } from 'react';
+import { Suspense, useMemo, useState, useEffect } from 'react';
 import { Canvas, useLoader } from '@react-three/fiber';
-import { OrbitControls, Html } from '@react-three/drei';
+import { OrbitControls } from '@react-three/drei';
 import URDFLoader, { URDFRobot } from 'urdf-loader';
-import { ColladaLoader, SkeletonUtils } from 'three-stdlib';
+import { ColladaLoader } from 'three-stdlib';
+import useWebSocket from 'react-use-websocket';
+import * as THREE from 'three';
 
-function Loader() {
-    return (
-        <Html center>
-            <div className="text-lg text-gray-800 dark:text-gray-100 font-semibold">
-                로봇 모델을 불러오는 중...
-            </div>
-        </Html>
-    );
-}
+import { WebsocketData } from '@/components/dt/types';
+import { Loader } from '@/components/dt/Loader';
+import { RobotScene } from '@/components/dt/RobotScene';
 
-interface RobotInstancesProps {
-    robotPositions: [number, number, number][];
-}
+export function MultiRobotViewer() {
+    const [transformData, setTransformData] = useState<WebsocketData | null>(null);
+    const { lastJsonMessage } = useWebSocket('ws://192.168.0.196:52000/ws/transforms_robot', {
+        onOpen: () => console.log('WebSocket connection established.'),
+        onClose: () => console.log('WebSocket connection closed.'),
+        onError: (event) => console.error('WebSocket error:', event),
+        shouldReconnect: (closeEvent) => true,
+    });
 
-function RobotInstances({ robotPositions }: RobotInstancesProps) {
-    const robot = useLoader(URDFLoader, "/urdf/dsr_description2/urdf/a0509.urdf", (loader) => {
+    useEffect(() => {
+        if (lastJsonMessage) {
+            setTransformData(lastJsonMessage as WebsocketData);
+        }
+    }, [lastJsonMessage]);
+
+    const robotModel = useLoader(URDFLoader as any, "/urdf/dsr_description2/urdf/a0509.urdf", (loader: any) => {
         loader.packages = {
             'dsr_description2': '/urdf/dsr_description2'
         };
-        loader.loadMeshCb = (path, manager, onComplete) => {
+        loader.loadMeshCb = (path: string, manager: THREE.LoadingManager, onComplete: (scene: THREE.Group) => void) => {
             const colladaLoader = new ColladaLoader(manager);
-            colladaLoader.load(path, (collada) => onComplete(collada.scene), undefined, (err) => {
+            colladaLoader.load(path, (collada) => onComplete(collada.scene as any), undefined, (err) => {
                 console.error(`Failed to load mesh: ${path}`, err);
                 onComplete(new THREE.Group());
             });
         };
     }) as URDFRobot;
 
-    const clones = useMemo(() => 
-        robotPositions.map(() => SkeletonUtils.clone(robot)), 
-        [robot, robotPositions]
-    );
+    const robotPositions = useMemo(() => {
+        const positions: [number, number, number][] = [];
+        const gridSize = 10;
+        const spacing = 2;
+        const offset = (gridSize - 1) * spacing / 2;
 
-    return (
-        <>
-            {clones.map((clone, i) => (
-                <primitive
-                    key={i}
-                    object={clone}
-                    position={robotPositions[i]}
-                    rotation={[-Math.PI / 2, 0, 0]}
-                />
-            ))}
-        </>
-    );
-}
+        for (let i = 0; i < gridSize; i++) {
+          for (let j = 0; j < gridSize; j++) {
+            const x = i * spacing - offset;
+            const z = j * spacing - offset;
+            positions.push([x, 0, z]);
+          }
+        }
+        return positions;
+    }, []);
 
-interface MultiRobotViewerProps {
-    robotPositions: [number, number, number][];
-}
+    const canvasGridSize = 22;
 
-export function MultiRobotViewer({ robotPositions }: MultiRobotViewerProps) {
-    const gridSize = 22; // 10x10 grid with 2m spacing + buffer
     return (
         <div className="w-full h-full cursor-grab active:cursor-grabbing">
             <Canvas camera={{ position: [15, 15, 15], fov: 50 }} shadows>
                 <color attach="background" args={["#e0e0e0"]} />
-                <ambientLight intensity={0.5} />
+                <ambientLight intensity={0.8} />
                 <directionalLight
-                    position={[20, 30, 25]}
-                    intensity={1.5}
+                    position={[10, 20, 15]}
+                    intensity={1.2}
                     castShadow
-                    shadow-mapSize-width={4096}
-                    shadow-mapSize-height={4096}
+                    shadow-mapSize-width={2048}
+                    shadow-mapSize-height={2048}
                 />
                 <Suspense fallback={<Loader />}>
-                    <RobotInstances robotPositions={robotPositions} />
+                    {robotModel && transformData ? (
+                        robotPositions.map((pos, i) => (
+                            <RobotScene
+                                key={i}
+                                basePosition={pos}
+                                transformData={transformData}
+                                robotModel={robotModel}
+                            />
+                        ))
+                    ) : (
+                        <Loader />
+                    )}
                 </Suspense>
                 <OrbitControls minDistance={1} maxDistance={50} />
-                <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.01, 0]} receiveShadow>
-                    <planeGeometry args={[gridSize * 2, gridSize * 2]} />
-                    <shadowMaterial opacity={0.3} />
-                </mesh>
-                <gridHelper args={[gridSize * 2, gridSize * 2]} />
+                <gridHelper args={[canvasGridSize * 2, canvasGridSize * 2]} />
             </Canvas>
         </div>
     );
 }
-

@@ -1,36 +1,41 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Enterprise BinPicking DT
 
-## Getting Started
+이 프로젝트는 엔터프라이즈 빈 피킹(Bin Picking) 로봇 시스템의 디지털 트윈(Digital Twin)을 위한 웹 애플리케이션입니다. 로봇의 상태, 경로 학습 과정, 실시간 카메라 피드 등 다양한 데이터를 시각화하고 모니터링하는 기능을 제공합니다.
 
-First, run the development server:
+## 주요 기능
+
+- **제품 소개 페이지 (`/landing`):** 서비스의 핵심 기능과 가치를 소개하는 랜딩 페이지입니다.
+- **로봇 DT 페이지 (`/robot-dt`):** 단일 로봇의 상태를 디지털 트윈으로 실시간 모니터링합니다.
+- **로봇 경로 학습 페이지 (`/robot-path-learning`):** 여러 로봇의 경로 학습 과정을 동시에 시각화하여 보여줍니다.
+- **실시간 이미지 뷰어 (`/image-viewer`):** 4개의 개별 웹소켓 스트림(Color, Depth, ArUco Debug, Board Perspective)을 통해 실시간 카메라 피드를 제공합니다. 특히 `Board Perspective` 뷰는 고유한 비율을 유지하며 강조 표시됩니다.
+
+## 시작하기
+
+프로젝트를 로컬 환경에서 실행하려면 다음 단계를 따르세요.
+
+### 사전 요구 사항
+
+- [Node.js](https://nodejs.org/) (버전 18.x 이상 권장)
+- [yarn](https://yarnpkg.com/) 또는 npm
+
+### 설치
+
+저장소를 클론하고 필요한 종속성을 설치합니다.
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+git clone <repository-url>
+cd enterprise-binpicking-dt
+yarn install
+# 또는 npm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 개발 서버 실행
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+다음 명령어를 사용하여 개발 서버를 시작합니다.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+yarn dev
+# 또는 npm run dev
+```
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+서버가 시작되면 브라우저에서 `http://localhost:3000`으로 접속하여 애플리케이션을 확인할 수 있습니다.
