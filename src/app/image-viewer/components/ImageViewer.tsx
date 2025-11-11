@@ -3,13 +3,18 @@
 import { useEffect, useState } from 'react';
 
 const ENDPOINTS = [
-  { path: '/ws/board_perspective_jpg', title: 'Board Perspective' },
+  {
+    path: '/ws/board_perspective_jpg',
+    title: 'Board Perspective',
+    transformClass: 'rotate-180 -scale-x-100',
+  },
   { path: '/ws/color_jpg', title: 'Color Image' },
   { path: '/ws/depth_jpg', title: 'Depth Image' },
   { path: '/ws/aruco_debug_jpg', title: 'ArUco Debug' },
 ];
 
-const WEBSOCKET_URL_BASE = 'ws://192.168.0.196:52000';
+const WEBSOCKET_URL_BASE = 'ws://192.168.0.196:53000';
+const RECONNECT_INTERVAL_MS = 1000;
 
 const LoadingIndicator = () => (
     <div className="flex items-center justify-center h-full">
@@ -26,50 +31,116 @@ const ImageViewer = () => {
   const [connectionStatus, setConnectionStatus] = useState<('connecting' | 'open' | 'closed')[]>(Array(ENDPOINTS.length).fill('connecting'));
 
   useEffect(() => {
-    const sockets: WebSocket[] = [];
+    const sockets: (WebSocket | null)[] = Array(ENDPOINTS.length).fill(null);
+    const reconnectTimers: (ReturnType<typeof setTimeout> | null)[] = Array(ENDPOINTS.length).fill(null);
+    let isUnmounted = false;
+
+    const clearReconnectTimer = (index: number) => {
+      const timer = reconnectTimers[index];
+      if (timer !== null) {
+        clearTimeout(timer);
+        reconnectTimers[index] = null;
+      }
+    };
 
     ENDPOINTS.forEach((endpoint, index) => {
-      const ws = new WebSocket(`${WEBSOCKET_URL_BASE}${endpoint.path}`);
-      
-      ws.onopen = () => {
-        console.log(`WebSocket open for ${endpoint.path}`);
-        setConnectionStatus(prev => {
+      const connect = () => {
+        if (isUnmounted) {
+          return;
+        }
+
+        clearReconnectTimer(index);
+
+        setConnectionStatus((prev) => {
+          if (isUnmounted) {
+            return prev;
+          }
+          const newStatus = [...prev];
+          newStatus[index] = 'connecting';
+          return newStatus;
+        });
+
+        const ws = new WebSocket(`${WEBSOCKET_URL_BASE}${endpoint.path}`);
+        sockets[index] = ws;
+
+        ws.onopen = () => {
+          if (isUnmounted) {
+            ws.close();
+            return;
+          }
+          console.log(`WebSocket open for ${endpoint.path}`);
+          setConnectionStatus((prev) => {
+            if (isUnmounted) {
+              return prev;
+            }
             const newStatus = [...prev];
             newStatus[index] = 'open';
             return newStatus;
-        });
-      };
-      
-      ws.onclose = () => {
-        console.log(`WebSocket closed for ${endpoint.path}`);
-        setConnectionStatus(prev => {
+          });
+        };
+
+        const scheduleReconnect = () => {
+          if (isUnmounted) {
+            return;
+          }
+
+          setConnectionStatus((prev) => {
+            if (isUnmounted) {
+              return prev;
+            }
             const newStatus = [...prev];
             newStatus[index] = 'closed';
             return newStatus;
-        });
-      };
-      
-      ws.onerror = (error) => console.error(`WebSocket error for ${endpoint.path}:`, error);
+          });
 
-      ws.onmessage = (event) => {
-        if (event.data instanceof Blob) {
-          const reader = new FileReader();
-          reader.onload = (e) => {
-            const result = e.target?.result as string;
-            setImages((prev) => {
-              const newImages = [...prev];
-              newImages[index] = result;
-              return newImages;
-            });
-          };
-          reader.readAsDataURL(event.data);
-        }
+          clearReconnectTimer(index);
+          reconnectTimers[index] = window.setTimeout(connect, RECONNECT_INTERVAL_MS);
+        };
+
+        ws.onclose = () => {
+          console.log(`WebSocket closed for ${endpoint.path}`);
+          scheduleReconnect();
+        };
+
+        ws.onerror = (error) => {
+          console.error(`WebSocket error for ${endpoint.path}:`, error);
+          scheduleReconnect();
+        };
+
+        ws.onmessage = (event) => {
+          if (event.data instanceof Blob) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+              if (isUnmounted) {
+                return;
+              }
+              const result = e.target?.result as string;
+              setImages((prev) => {
+                if (isUnmounted) {
+                  return prev;
+                }
+                const newImages = [...prev];
+                newImages[index] = result;
+                return newImages;
+              });
+            };
+            reader.readAsDataURL(event.data);
+          }
+        };
       };
 
-      sockets.push(ws);
+      connect();
     });
 
-    return () => sockets.forEach(socket => socket.close());
+    return () => {
+      isUnmounted = true;
+      sockets.forEach((socket) => socket?.close());
+      reconnectTimers.forEach((timer) => {
+        if (timer !== null) {
+          clearTimeout(timer);
+        }
+      });
+    };
   }, []);
 
   const [mainImage, ...otherImages] = images;
@@ -90,7 +161,15 @@ const ImageViewer = () => {
               <div className="bg-white rounded-xl shadow-lg overflow-hidden border border-neutral-200/80">
                   <div className="bg-neutral-800 text-white px-5 py-3 text-base font-semibold">{mainEndpoint.title}</div>
                   <div className="bg-neutral-100 flex items-center justify-center p-4 min-h-[400px]">
-                      {mainImage ? <img src={mainImage} alt={mainEndpoint.title} className="max-w-full h-auto object-contain rounded-md" /> : <LoadingIndicator />}
+                      {mainImage ? (
+                        <img
+                          src={mainImage}
+                          alt={mainEndpoint.title}
+                          className={`max-w-full h-auto object-contain rounded-md ${mainEndpoint.transformClass ?? ''}`}
+                        />
+                      ) : (
+                        <LoadingIndicator />
+                      )}
                   </div>
               </div>
 
@@ -100,7 +179,15 @@ const ImageViewer = () => {
                   <div key={otherEndpoints[index].path} className="bg-white rounded-xl shadow-lg overflow-hidden border border-neutral-200/80 transition-shadow hover:shadow-2xl">
                       <div className="bg-neutral-800 text-white px-5 py-3 text-base font-semibold">{otherEndpoints[index].title}</div>
                       <div className="aspect-w-16 aspect-h-9 bg-neutral-100 flex items-center justify-center">
-                          {src ? <img src={src} alt={otherEndpoints[index].title} className="w-full h-full object-cover" /> : <LoadingIndicator />}
+                          {src ? (
+                            <img
+                              src={src}
+                              alt={otherEndpoints[index].title}
+                              className={`w-full h-full object-cover ${otherEndpoints[index].transformClass ?? ''}`}
+                            />
+                          ) : (
+                            <LoadingIndicator />
+                          )}
                       </div>
                   </div>
               ))}

@@ -12,33 +12,55 @@ import { WebsocketData } from '@/components/dt/types';
 import { Loader } from '@/components/dt/Loader';
 import { RobotScene } from '@/components/dt/RobotScene';
 
+const isWebsocketData = (value: unknown): value is WebsocketData => {
+    if (!value || typeof value !== 'object') {
+        return false;
+    }
+    const candidate = value as Partial<WebsocketData>;
+    return (
+        typeof candidate.frame === 'string' &&
+        candidate.board !== undefined &&
+        candidate.robot !== undefined
+    );
+};
+
 export function MultiRobotViewer() {
     const [transformData, setTransformData] = useState<WebsocketData | null>(null);
-    const { lastJsonMessage } = useWebSocket('ws://192.168.0.196:52000/ws/transforms_robot', {
+    const { lastJsonMessage } = useWebSocket('ws://192.168.0.196:53000/ws/transforms_robot', {
         onOpen: () => console.log('WebSocket connection established.'),
         onClose: () => console.log('WebSocket connection closed.'),
         onError: (event) => console.error('WebSocket error:', event),
-        shouldReconnect: (closeEvent) => true,
+        shouldReconnect: () => true,
+        reconnectInterval: 1000,
     });
 
     useEffect(() => {
-        if (lastJsonMessage) {
-            setTransformData(lastJsonMessage as WebsocketData);
+        if (isWebsocketData(lastJsonMessage)) {
+            setTransformData(lastJsonMessage);
         }
     }, [lastJsonMessage]);
 
-    const robotModel = useLoader(URDFLoader as any, "/urdf/dsr_description2/urdf/a0509.urdf", (loader: any) => {
+    const robotModel = useLoader<URDFRobot, string>(
+      URDFLoader,
+      "/urdf/dsr_description2/urdf/a0509.urdf",
+      (loader) => {
         loader.packages = {
             'dsr_description2': '/urdf/dsr_description2'
         };
         loader.loadMeshCb = (path: string, manager: THREE.LoadingManager, onComplete: (scene: THREE.Group) => void) => {
             const colladaLoader = new ColladaLoader(manager);
-            colladaLoader.load(path, (collada) => onComplete(collada.scene as any), undefined, (err) => {
+            colladaLoader.load(
+              path,
+              (collada: { scene: THREE.Group }) => onComplete(collada.scene),
+              undefined,
+              (err: unknown) => {
                 console.error(`Failed to load mesh: ${path}`, err);
                 onComplete(new THREE.Group());
-            });
+              }
+            );
         };
-    }) as URDFRobot;
+      }
+    );
 
     const robotPositions = useMemo(() => {
         const positions: [number, number, number][] = [];

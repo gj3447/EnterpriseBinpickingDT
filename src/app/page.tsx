@@ -61,6 +61,18 @@ export default function MainPage() {
             <div className="absolute bottom-0 left-0 w-full h-1 bg-red-500 transition-transform duration-300 scale-x-0 group-hover:scale-x-100"></div>
           </div>
         </Link>
+        <Link href="/ycb-browser">
+          <div className="group relative w-72 h-80 bg-white dark:bg-gray-800 rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 flex flex-col items-center justify-center p-6 text-center cursor-pointer overflow-hidden">
+            <Camera className="w-20 h-20 text-amber-500 mb-4 transition-transform duration-300 group-hover:scale-110" />
+            <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100 mb-2">
+              YCB 데이터 뷰어
+            </h2>
+            <p className="text-gray-600 dark:text-gray-400">
+              ycb_images에서 물체 이미지 후보를 선택합니다.
+            </p>
+            <div className="absolute bottom-0 left-0 w-full h-1 bg-amber-500 transition-transform duration-300 scale-x-0 group-hover:scale-x-100"></div>
+          </div>
+        </Link>
       </div>
     </main>
   );
