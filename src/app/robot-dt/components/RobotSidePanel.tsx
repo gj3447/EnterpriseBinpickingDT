@@ -7,15 +7,17 @@ import { RobotControlPanel } from './RobotControlPanel';
 import { RobotSettingsPanel } from './RobotSettingsPanel';
 import { RobotIkPanel } from './RobotIkPanel';
 import { RobotMarkerPanel } from './RobotMarkerPanel';
+import { RobotSequencePanel } from './RobotSequencePanel';
 
-type PanelTab = 'inference' | 'control' | 'markers' | 'ik' | 'settings';
+type PanelTab = 'inference' | 'control' | 'markers' | 'ik' | 'settings' | 'sequence';
 
-const TABS: { id: PanelTab; label: string }[] = [
-  { id: 'inference', label: '추론 패널' },
-  { id: 'control', label: '로봇 조종' },
-  { id: 'markers', label: '마커 선택' },
-  { id: 'ik', label: 'IK 제어' },
-  { id: 'settings', label: '로봇 설정' },
+const TABS: { id: PanelTab; label: string; icon: string }[] = [
+  { id: 'inference', label: '추론 패널', icon: '🧠' },
+  { id: 'control', label: '로봇 조종', icon: '🤖' },
+  { id: 'markers', label: '마커 선택', icon: '📍' },
+  { id: 'ik', label: 'IK 제어', icon: '🎯' },
+  { id: 'settings', label: '로봇 설정', icon: '⚙️' },
+  { id: 'sequence', label: '시퀀스 제작', icon: '🧾' },
 ];
 
 interface RobotSidePanelProps {
@@ -35,13 +37,15 @@ export function RobotSidePanel({ objects }: RobotSidePanelProps) {
               key={tab.id}
               type="button"
               onClick={() => setActiveTab(tab.id)}
-              className={`px-4 py-2 text-sm font-semibold rounded-full border transition-colors duration-150 ${
+              className={`px-3 py-2 text-lg rounded-full border transition-colors duration-150 ${
                 isActive
                   ? 'bg-neutral-100 text-neutral-900 border-neutral-100 shadow-inner'
                   : 'border-neutral-700 text-neutral-400 hover:text-neutral-200 hover:border-neutral-500'
               }`}
+              title={tab.label}
             >
-              {tab.label}
+              <span aria-hidden>{tab.icon}</span>
+              <span className="sr-only">{tab.label}</span>
             </button>
           );
         })}
@@ -53,6 +57,7 @@ export function RobotSidePanel({ objects }: RobotSidePanelProps) {
         {activeTab === 'markers' && <RobotMarkerPanel />}
         {activeTab === 'ik' && <RobotIkPanel />}
         {activeTab === 'settings' && <RobotSettingsPanel />}
+        {activeTab === 'sequence' && <RobotSequencePanel />}
       </div>
     </div>
   );

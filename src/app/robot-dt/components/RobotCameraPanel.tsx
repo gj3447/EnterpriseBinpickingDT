@@ -2,8 +2,10 @@
 
 import { useEffect, useMemo, useState } from 'react';
 
-const STREAM_WS_BASE = process.env.NEXT_PUBLIC_STREAM_WS_BASE ?? 'ws://192.168.0.196:53000';
-const RECONNECT_INTERVAL_MS = 1000;
+import { appConfig } from '@/config';
+
+const STREAM_WS_BASE = appConfig.streams.wsBase;
+const RECONNECT_INTERVAL_MS = appConfig.streams.reconnectIntervalMs;
 
 type ConnectionState = 'connecting' | 'open' | 'closed';
 
@@ -11,7 +13,6 @@ interface CameraStreamConfig {
   id: CameraTab;
   label: string;
   path: string;
-  description: string;
   transformClass?: string;
 }
 
@@ -25,15 +26,13 @@ const CAMERA_STREAMS: CameraStreamConfig[] = [
   {
     id: 'calibration',
     label: '전면 보정뷰',
-    path: '/ws/board_perspective_jpg',
-    description: '보드 좌표계를 기준으로 정렬한 전면 보정 스트림입니다.',
+    path: appConfig.streams.paths.boardPerspective,
     transformClass: 'rotate-180 -scale-x-100',
   },
   {
     id: 'color',
     label: '컬러 카메라',
-    path: '/ws/color_jpg',
-    description: '실시간 컬러 이미지를 그대로 확인할 수 있는 스트림입니다.',
+    path: appConfig.streams.paths.color,
   },
 ];
 
@@ -144,7 +143,6 @@ export function RobotCameraPanel({ variant = 'panel' }: RobotCameraPanelProps) {
               {statusLabel}
             </span>
           </div>
-          <p className="mt-2 text-[11px] leading-relaxed text-neutral-400">전면 보정뷰와 컬러 이미지를 빠르게 확인할 수 있는 미니 스트림입니다.</p>
           <div className="mt-3 flex gap-1">
             {CAMERA_STREAMS.map((stream) => {
               const isActive = stream.id === activeTab;
@@ -214,9 +212,6 @@ export function RobotCameraPanel({ variant = 'panel' }: RobotCameraPanelProps) {
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-xl font-semibold tracking-tight">카메라 스트림</h2>
-            <p className="text-sm text-neutral-400 mt-1">
-              전면 보정 뷰와 일반 컬러 카메라를 탭으로 전환하며 확인할 수 있습니다.
-            </p>
           </div>
         </div>
         <div className="mt-4 flex gap-2">
@@ -250,7 +245,6 @@ export function RobotCameraPanel({ variant = 'panel' }: RobotCameraPanelProps) {
                   {statusLabel}
                 </span>
               </div>
-              <p className="text-xs text-neutral-500 mt-1 leading-relaxed">{activeStream.description}</p>
             </div>
             <span className="text-xs text-neutral-600">
               {STREAM_WS_BASE}

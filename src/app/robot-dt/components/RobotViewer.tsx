@@ -5,7 +5,7 @@ import { Canvas, useLoader } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import URDFLoader, { URDFRobot } from 'urdf-loader';
 import { ColladaLoader } from 'three-stdlib';
-import useWebSocket from 'react-use-websocket';
+import useWebSocket, { ReadyState } from 'react-use-websocket';
 import * as THREE from 'three';
 
 import { WebsocketData } from '@/components/dt/types';
@@ -13,6 +13,9 @@ import { Loader } from '@/components/dt/Loader';
 import { RobotScene } from '@/components/dt/RobotScene';
 import { degreesToRadians, useRobotControlStore } from '@/stores/robotControlStore';
 import { useOpcUaStore } from '@/stores/opcUaStore';
+import { useTransformStore } from '@/stores/transformStore';
+import { appConfig } from '@/config';
+import { StreamConnectionBadge } from '@/components/dt/StreamConnectionBadge';
 import { RobotCameraPanel } from './RobotCameraPanel';
 import { RobotPosePanel } from './RobotPosePanel';
 
@@ -28,15 +31,19 @@ const isWebsocketData = (value: unknown): value is WebsocketData => {
   );
 };
 
+const TRANSFORMS_WS_URL = appConfig.streams.urls.transforms;
+const TRANSFORM_RECONNECT_INTERVAL_MS = appConfig.streams.reconnectIntervalMs;
+
 function SceneContent() {
     const [transformData, setTransformData] = useState<WebsocketData | null>(null);
-    const { lastJsonMessage } = useWebSocket('ws://192.168.0.196:53000/ws/transforms_robot', {
+    const { lastJsonMessage, readyState } = useWebSocket(TRANSFORMS_WS_URL, {
         onOpen: () => console.log('WebSocket connection established.'),
         onClose: () => console.log('WebSocket connection closed.'),
         onError: (event) => console.error('WebSocket error:', event),
         shouldReconnect: () => true,
-        reconnectInterval: 1000,
+        reconnectInterval: TRANSFORM_RECONNECT_INTERVAL_MS,
     });
+    const setConnectionState = useTransformStore((state) => state.setConnectionState);
     const manualEnabled = useRobotControlStore((state) => state.manualEnabled);
     const jointAnglesDeg = useRobotControlStore((state) => state.jointAnglesDeg);
     const manualJointAnglesRad = useMemo(
@@ -63,6 +70,19 @@ function SceneContent() {
         }),
         []
     );
+
+    useEffect(() => {
+        if (readyState === undefined) {
+            return;
+        }
+        const state =
+            readyState === ReadyState.OPEN
+                ? 'open'
+                : readyState === ReadyState.CLOSED || readyState === ReadyState.CLOSING
+                ? 'closed'
+                : 'connecting';
+        setConnectionState(state);
+    }, [readyState, setConnectionState]);
 
     useEffect(() => {
         if (isWebsocketData(lastJsonMessage)) {
@@ -139,6 +159,7 @@ function ViewerOverlay() {
     <div className="pointer-events-none absolute inset-0 flex justify-between">
       <PoseManagerDock />
       <div className="pointer-events-auto flex flex-col gap-3 p-4 items-end">
+        <StreamConnectionBadge />
         <RobotCameraPanel variant="overlay" />
         <ActionSummaryCard />
       </div>
@@ -161,19 +182,17 @@ function ActionSummaryCard() {
   const fetchStatus = useOpcUaStore((state) => state.fetchStatus);
   const pushTargetJoints = useOpcUaStore((state) => state.pushTargetJoints);
   const pulseGripper = useOpcUaStore((state) => state.pulseGripper);
+  const commandStatus = useOpcUaStore((state) => state.status.commandStatus);
+  const gripperIn1 = useOpcUaStore((state) => state.status.gripperIn1);
+  const gripperSyncState = useOpcUaStore((state) => state.status.gripperSyncState);
   const setJointAnglesDeg = useRobotControlStore((state) => state.setJointAnglesDeg);
   const setManualEnabled = useRobotControlStore((state) => state.setManualEnabled);
   const [pullLoading, setPullLoading] = useState(false);
-  const [pullFeedback, setPullFeedback] = useState<string | null>(null);
   const [pushLoading, setPushLoading] = useState(false);
   const [gripLoading, setGripLoading] = useState(false);
   const [releaseLoading, setReleaseLoading] = useState(false);
-  const [pushFeedback, setPushFeedback] = useState<string | null>(null);
-  const [gripFeedback, setGripFeedback] = useState<string | null>(null);
-  const [releaseFeedback, setReleaseFeedback] = useState<string | null>(null);
 
   const handlePull = useCallback(async () => {
-    setPullFeedback(null);
     setPullLoading(true);
     try {
       console.log('[PULL] Fetching OPC status…');
@@ -185,21 +204,17 @@ function ActionSummaryCard() {
         setJointAnglesDeg(latestJoints);
         setManualEnabled(true);
         console.log('[PULL] Applied to DT (deg):', latestJoints);
-        setPullFeedback('실제 로봇 관절 각도를 디지털 트윈에 적용했습니다.');
       } else {
         console.warn('[PULL] currentJoints value unavailable.');
-        setPullFeedback('조인트 값을 불러오지 못했습니다. 잠시 후 다시 시도하세요.');
       }
     } catch (error) {
       console.error('[PULL] Failed to fetch/apply status:', error);
-      setPullFeedback(error instanceof Error ? error.message : 'Pull 작업에 실패했습니다.');
     } finally {
       setPullLoading(false);
     }
   }, [fetchStatus, setJointAnglesDeg, setManualEnabled]);
 
   const handlePush = useCallback(async () => {
-    setPushFeedback(null);
     setPushLoading(true);
     try {
       const state = useRobotControlStore.getState();
@@ -207,84 +222,62 @@ function ActionSummaryCard() {
       const velocity = state.jointVelocity;
       const acceleration = state.jointAcceleration;
       await pushTargetJoints(dtAngles, { velocity, acceleration, mode: 1 });
-      setPushFeedback('디지털 트윈 관절 값을 OPC UA로 전송했습니다.');
     } catch (error) {
       console.error('[PUSH] Failed to push target joints:', error);
-      setPushFeedback(error instanceof Error ? error.message : 'Push 작업에 실패했습니다.');
     } finally {
       setPushLoading(false);
     }
   }, [pushTargetJoints]);
 
   const handleGrip = useCallback(async () => {
-    setGripFeedback(null);
     setGripLoading(true);
     try {
       await pulseGripper('grip');
-      setGripFeedback('그리퍼 그립 명령을 전송했습니다.');
     } catch (error) {
       console.error('[GRIP] Failed to trigger gripper:', error);
-      setGripFeedback(error instanceof Error ? error.message : 'Grip 동작에 실패했습니다.');
     } finally {
       setGripLoading(false);
     }
   }, [pulseGripper]);
 
   const handleRelease = useCallback(async () => {
-    setReleaseFeedback(null);
     setReleaseLoading(true);
     try {
       await pulseGripper('release');
-      setReleaseFeedback('그리퍼 릴리즈 명령을 전송했습니다.');
     } catch (error) {
       console.error('[RELEASE] Failed to trigger gripper release:', error);
-      setReleaseFeedback(error instanceof Error ? error.message : 'Release 동작에 실패했습니다.');
     } finally {
       setReleaseLoading(false);
     }
   }, [pulseGripper]);
 
-  const ACTIONS: Array<{
-    key: 'pull' | 'push' | 'grip' | 'release';
-    label: string;
-    onClick: () => void;
-    disabled?: boolean;
-    loading?: boolean;
-    feedback: string | null;
-  }> = [
-    {
-      key: 'pull',
-      label: 'PULL',
-      onClick: () => void handlePull(),
-      disabled: pullLoading || opcLoading,
-      loading: pullLoading,
-      feedback: pullFeedback,
-    },
-    {
-      key: 'push',
-      label: 'PUSH',
-      onClick: () => void handlePush(),
-      disabled: pushLoading || opcLoading,
-      loading: pushLoading,
-      feedback: pushFeedback,
-    },
-    {
-      key: 'grip',
-      label: 'GRIP',
-      onClick: () => void handleGrip(),
-      disabled: gripLoading || opcLoading,
-      loading: gripLoading,
-      feedback: gripFeedback,
-    },
-    {
-      key: 'release',
-      label: 'RELEASE',
-      onClick: () => void handleRelease(),
-      disabled: releaseLoading || opcLoading,
-      loading: releaseLoading,
-      feedback: releaseFeedback,
-    },
-  ];
+  const gripperOpenActive = gripperIn1 === true;
+  const gripperCloseActive = gripperIn1 === false;
+  const syncStopActive = gripperSyncState === true;
+  const syncMoveActive = gripperSyncState === false;
+  const robotMovingActive = commandStatus === 4;
+  const robotIdleActive = commandStatus !== 4;
+
+  const pillBase =
+    'px-3 py-1 text-[11px] font-semibold uppercase tracking-wider rounded-full border transition-colors';
+  const openClass = gripperOpenActive
+    ? `${pillBase} border-emerald-400/60 bg-emerald-500/15 text-emerald-200`
+    : `${pillBase} border-neutral-800 bg-neutral-900/60 text-neutral-500`;
+  const closeClass = gripperCloseActive
+    ? `${pillBase} border-rose-400/60 bg-rose-500/15 text-rose-200`
+    : `${pillBase} border-neutral-800 bg-neutral-900/60 text-neutral-500`;
+  const syncStopClass = syncStopActive
+    ? `${pillBase} border-sky-400/60 bg-sky-500/15 text-sky-200`
+    : `${pillBase} border-neutral-800 bg-neutral-900/60 text-neutral-500`;
+  const syncMoveClass = syncMoveActive
+    ? `${pillBase} border-amber-400/60 bg-amber-500/15 text-amber-200`
+    : `${pillBase} border-neutral-800 bg-neutral-900/60 text-neutral-500`;
+  const robotIdleClass = robotIdleActive
+    ? `${pillBase} border-blue-400/60 bg-blue-500/15 text-blue-200`
+    : `${pillBase} border-neutral-800 bg-neutral-900/60 text-neutral-500`;
+  const robotMoveClass = robotMovingActive
+    ? `${pillBase} border-purple-400/60 bg-purple-500/15 text-purple-200`
+    : `${pillBase} border-neutral-800 bg-neutral-900/60 text-neutral-500`;
 
   return (
     <div className="pointer-events-auto w-[280px] rounded-2xl border border-neutral-800/80 bg-neutral-950/80 px-4 py-4 text-neutral-100 shadow-xl shadow-black/30 backdrop-blur-sm">
@@ -292,25 +285,64 @@ function ActionSummaryCard() {
         <h3 className="text-sm font-semibold tracking-tight text-neutral-50">로봇 액션 흐름</h3>
         <span className="text-[10px] font-semibold uppercase tracking-[0.28em] text-neutral-600">모킹</span>
       </header>
-      <p className="mt-2 text-[11px] leading-relaxed text-neutral-400">
-        UI만 제공되며 실제 명령은 연결되어 있지 않습니다. 각 액션의 데이터 흐름을 참고하세요.
-      </p>
-      <div className="mt-4 space-y-3 text-[11px] text-neutral-300">
-        {ACTIONS.map((action) => (
-          <div key={action.key}>
+      <div className="mt-4 space-y-4 text-[11px] text-neutral-300">
+        <section className="rounded-2xl border border-neutral-800/70 bg-neutral-900/60 px-4 py-4">
+          <div className="flex items-center justify-between text-neutral-400 uppercase tracking-widest">
+            <span>로봇 동작</span>
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-2">
             <button
               type="button"
-              onClick={action.onClick}
-              disabled={action.disabled}
-              className="w-full rounded-2xl border border-neutral-800/80 bg-neutral-900/70 px-4 py-5 text-center text-2xl font-semibold uppercase tracking-wide text-neutral-50 transition hover:border-emerald-500/50 disabled:opacity-40"
+              onClick={() => void handlePull()}
+              disabled={pullLoading || opcLoading}
+              className="rounded-xl border border-neutral-800/80 bg-neutral-900/70 px-3 py-3 text-center text-lg font-semibold uppercase tracking-wide text-neutral-50 transition hover:border-emerald-500/50 disabled:opacity-40"
             >
-              {action.loading ? `${action.label}…` : action.label}
+              {pullLoading ? 'PULL…' : 'PULL'}
             </button>
-            {action.feedback && (
-              <p className="mt-2 text-[11px] leading-relaxed text-neutral-400">{action.feedback}</p>
-            )}
+            <button
+              type="button"
+              onClick={() => void handlePush()}
+              disabled={pushLoading || opcLoading}
+              className="rounded-xl border border-neutral-800/80 bg-neutral-900/70 px-3 py-3 text-center text-lg font-semibold uppercase tracking-wide text-neutral-50 transition hover:border-emerald-500/50 disabled:opacity-40"
+            >
+              {pushLoading ? 'PUSH…' : 'PUSH'}
+            </button>
           </div>
-        ))}
+          <div className="grid grid-cols-2 gap-2 pt-2">
+            <span className={robotIdleClass}>정지</span>
+            <span className={robotMoveClass}>움직임</span>
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-neutral-800/70 bg-neutral-900/60 px-4 py-4 space-y-3">
+          <div className="flex items-center justify-between text-neutral-400 uppercase tracking-widest">
+            <span>그리퍼 동작</span>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => void handleGrip()}
+              disabled={gripLoading || opcLoading}
+              className="rounded-xl border border-neutral-800/80 bg-neutral-900/70 px-3 py-3 text-center text-lg font-semibold uppercase tracking-wide text-neutral-50 transition hover:border-emerald-500/50 disabled:opacity-40"
+            >
+              {gripLoading ? 'GRIP…' : 'GRIP'}
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleRelease()}
+              disabled={releaseLoading || opcLoading}
+              className="rounded-xl border border-neutral-800/80 bg-neutral-900/70 px-3 py-3 text-center text-lg font-semibold uppercase tracking-wide text-neutral-50 transition hover:border-emerald-500/50 disabled:opacity-40"
+            >
+              {releaseLoading ? 'RELEASE…' : 'RELEASE'}
+            </button>
+          </div>
+          <div className="grid grid-cols-2 gap-2 pt-2">
+            <span className={openClass}>열림</span>
+            <span className={closeClass}>닫힘</span>
+            <span className={syncStopClass}>정지</span>
+            <span className={syncMoveClass}>움직임</span>
+          </div>
+        </section>
       </div>
     </div>
   );

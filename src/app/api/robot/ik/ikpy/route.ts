@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const IKPY_ENDPOINT =
-  process.env.ROBOT_IK_IKPY_ENDPOINT ?? 'http://192.168.0.196:53000/api/robot/ik/ikpy';
+import { appConfig } from '@/config';
+
+const IKPY_ENDPOINT = appConfig.robotIk.ikpyEndpoint;
 
 export async function POST(request: NextRequest) {
   try {

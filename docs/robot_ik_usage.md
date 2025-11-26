@@ -132,8 +132,9 @@ curl -X POST http://HOST:PORT/api/robot/ik/ikpy/downward \
 2. 프록시는 `src/app/api/robot/ik/ikpy/**` 경로에 정의되어 있습니다.  
    `.env.local` 에 `ROBOT_IK_IKPY_ENDPOINT`, `ROBOT_IK_IKPY_DOWNWARD_ENDPOINT` 값을 지정해 실제 서버 URL을 재설정할 수 있습니다.
    - 만약 IKPy 경로가 404를 반환하면 코드에서 자동으로 `/api/robot/ik` / `/api/robot/ik/downward` 로 한 번 더 재시도합니다.
-3. 요청 페이로드의 `grip_offsets` 는 `[그리퍼 길이(m)]` 형태의 스칼라 배열입니다. 예: `210mm → [0.21]`.
-4. 자동 요청 로그에서 `endpoint` 가 `/ikpy/downward` 로 유지된다면 토글이 내려가지 않은 상태이므로 다시 확인해 주세요.
+3. 요청 페이로드의 `grip_offsets` 는 `[그리퍼 길이(m)]` 형태의 스칼라 배열입니다. 예: `210mm → [0.21]`. UI 기본값은 260&nbsp;mm이며 필요 시 슬라이더로 조정합니다.
+4. 그립 깊이 프리셋은 기본 60&nbsp;mm로 저장되며, 향후 픽업 시나리오에서 동일한 값을 참조할 수 있도록 상태에 보존됩니다(아직 서버로 전송되진 않습니다).
+5. 자동 요청 로그에서 `endpoint` 가 `/ikpy/downward` 로 유지된다면 토글이 내려가지 않은 상태이므로 다시 확인해 주세요.
 
 ---
 

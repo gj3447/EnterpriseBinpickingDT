@@ -2,13 +2,31 @@
 
 import { create } from 'zustand';
 
+import { getOpcWritableNodeMeta } from '@/lib/opcuaNodeMeta';
+
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 const writeOpcUaNodes = async (requests: Array<{ nodeId: string; value: unknown; dataType?: string }>) => {
+  const typedRequests = requests.map((request) => {
+    if (request.dataType) {
+      return request;
+    }
+    const meta = getOpcWritableNodeMeta(request.nodeId);
+    if (!meta) {
+      return request;
+    }
+    return {
+      ...request,
+      dataType: meta.variantType,
+    };
+  });
+
   const response = await fetch('/api/opcua/write', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ requests }),
+    body: JSON.stringify({ requests: typedRequests }),
   });
 
   if (!response.ok) {
@@ -27,21 +45,162 @@ const STATUS_NODE_IDS = {
   motionState: 'ns=2;i=14',
   commandStatus: 'ns=2;i=15',
   errorCode: 'ns=2;i=16',
+  gripperIn1: 'ns=2;i=17',
 } as const;
 
 const COMMAND_NODE_IDS = {
-  mode: 'ns=2;i=52',
-  jVel: 'ns=2;i=53',
-  jAcc: 'ns=2;i=54',
-  lVel: 'ns=2;i=55',
-  lAcc: 'ns=2;i=56',
-  trigger: 'ns=2;i=57',
-  targetJoints: 'ns=2;i=50',
-  gripperOpen: 'ns=2;i=58',
-  gripperClose: 'ns=2;i=59',
+  targetJoints: 'ns=2;i=52',
+  mode: 'ns=2;i=54',
+  jVel: 'ns=2;i=55',
+  jAcc: 'ns=2;i=56',
+  lVel: 'ns=2;i=57',
+  lAcc: 'ns=2;i=58',
+  trigger: 'ns=2;i=59',
+  gripperOpen: 'ns=2;i=60',
+  gripperClose: 'ns=2;i=61',
 } as const;
 
-const READ_NODE_ID_LIST = [...Object.values(STATUS_NODE_IDS), ...Object.values(COMMAND_NODE_IDS)];
+const GRIPPER_ROOT_NODE_ID = 'ns=2;i=4';
+
+interface OpcUaTreeNode {
+  nodeId: string;
+  displayName?: string;
+  browseName?: string;
+  children?: OpcUaTreeNode[];
+}
+
+interface GripperStatusNodeIds {
+  internalState?: string;
+  syncState?: string;
+}
+
+type DetectionState = 'unknown' | 'supported' | 'unsupported';
+
+let gripperStatusDetectionState: DetectionState = 'unknown';
+let gripperStatusDetectionPromise: Promise<GripperStatusNodeIds | null> | null = null;
+let gripperStatusNodeIdsCache: GripperStatusNodeIds | null = null;
+
+const normalizeName = (value?: string) => value?.trim().toLowerCase() ?? '';
+
+const findChildByName = (node: OpcUaTreeNode | undefined, name: string) => {
+  if (!node?.children || node.children.length === 0) {
+    return undefined;
+  }
+  const target = normalizeName(name);
+  return node.children.find((child) => {
+    const display = normalizeName(child.displayName);
+    const browse = normalizeName(child.browseName);
+    return display === target || browse === target;
+  });
+};
+
+
+const fetchGripperStatusNodeIds = async (): Promise<GripperStatusNodeIds | null> => {
+  try {
+    const response = await fetch('/api/opcua/tree', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        startNodeId: GRIPPER_ROOT_NODE_ID,
+        maxDepth: 3,
+        maxChildrenPerNode: 50,
+      }),
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      console.warn('[OPC Gripper] 트리 조회 실패:', text || response.status);
+      return null;
+    }
+
+    const data = await response.json();
+    const tree: OpcUaTreeNode | undefined = data?.tree;
+    if (!tree) {
+      console.warn('[OPC Gripper] 응답에 tree가 없습니다.');
+      return null;
+    }
+
+    const statusNode = findChildByName(tree, 'Status');
+    if (!statusNode) {
+      console.warn('[OPC Gripper] Status 노드를 찾지 못했습니다.');
+      return null;
+    }
+
+    const internalState = findChildByName(statusNode, 'InternalState')?.nodeId;
+    const syncState = findChildByName(statusNode, 'SyncState')?.nodeId;
+
+    if (!internalState && !syncState) {
+      console.info('[OPC Gripper] InternalState/SyncState 노드를 찾지 못했습니다.');
+      return null;
+    }
+
+    return { internalState, syncState };
+  } catch (error) {
+    console.error('[OPC Gripper] 트리 탐색 중 오류', error);
+    throw error;
+  }
+};
+
+const getGripperStatusNodeIds = async (): Promise<GripperStatusNodeIds | null> => {
+  if (gripperStatusDetectionState === 'supported') {
+    return gripperStatusNodeIdsCache;
+  }
+
+  if (gripperStatusDetectionState === 'unsupported') {
+    return null;
+  }
+
+  if (!gripperStatusDetectionPromise) {
+    gripperStatusDetectionPromise = fetchGripperStatusNodeIds()
+      .then((result) => {
+        if (result) {
+          gripperStatusNodeIdsCache = result;
+          gripperStatusDetectionState = 'supported';
+          console.info('[OPC Gripper] InternalState/SyncState 노드를 감지했습니다.');
+          return result;
+        }
+        gripperStatusDetectionState = 'unsupported';
+        return null;
+      })
+      .catch((error) => {
+        console.error('[OPC Gripper] 노드 탐지 실패', error);
+        gripperStatusDetectionState = 'unknown';
+        return null;
+      })
+      .finally(() => {
+        gripperStatusDetectionPromise = null;
+      });
+  }
+
+  return gripperStatusDetectionPromise;
+};
+
+const buildReadPayload = async () => {
+  const nodeIds = new Set(BASE_READ_NODE_ID_LIST);
+  let gripperStatusNodeIds: GripperStatusNodeIds | null = null;
+
+  try {
+    gripperStatusNodeIds = await getGripperStatusNodeIds();
+    if (gripperStatusNodeIds?.internalState) {
+      nodeIds.add(gripperStatusNodeIds.internalState);
+    }
+    if (gripperStatusNodeIds?.syncState) {
+      nodeIds.add(gripperStatusNodeIds.syncState);
+    }
+  } catch {
+    // ignore detection failure
+  }
+
+  return {
+    nodeIds: Array.from(nodeIds),
+    gripperStatusNodeIds,
+  };
+};
+
+const BASE_READ_NODE_ID_LIST = [
+  ...Object.values(STATUS_NODE_IDS),
+  ...Object.values(COMMAND_NODE_IDS),
+];
 const POLL_INTERVAL_MS = 2000;
 
 const parseNumberArray = (value: unknown): number[] | null => {
@@ -98,6 +257,50 @@ const parseNumber = (value: unknown): number | null => {
   return null;
 };
 
+const parseBoolean = (value: unknown): boolean | null => {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  if (typeof value === 'number') {
+    if (value === 1) {
+      return true;
+    }
+    if (value === 0) {
+      return false;
+    }
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim().toLowerCase();
+    if (trimmed === 'true') {
+      return true;
+    }
+    if (trimmed === 'false') {
+      return false;
+    }
+  }
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      const candidate = parseBoolean(entry);
+      if (candidate !== null) {
+        return candidate;
+      }
+    }
+    return null;
+  }
+  if (value && typeof value === 'object') {
+    if ('value' in (value as Record<string, unknown>)) {
+      return parseBoolean((value as Record<string, unknown>).value);
+    }
+    for (const entry of Object.values(value as Record<string, unknown>)) {
+      const candidate = parseBoolean(entry);
+      if (candidate !== null) {
+        return candidate;
+      }
+    }
+  }
+  return null;
+};
+
 interface OpcUaStatusSnapshot {
   currentJoints: number[] | null;
   currentTcp: number[] | null;
@@ -106,6 +309,9 @@ interface OpcUaStatusSnapshot {
   motionState: number | null;
   commandStatus: number | null;
   errorCode: number | null;
+  gripperIn1: boolean | null;
+  gripperInternalState: boolean | null;
+  gripperSyncState: boolean | null;
 }
 
 interface OpcUaCommandSnapshot {
@@ -142,6 +348,9 @@ export const useOpcUaStore = create<OpcUaState>((set, get) => ({
     motionState: null,
     commandStatus: null,
     errorCode: null,
+    gripperIn1: null,
+    gripperInternalState: null,
+    gripperSyncState: null,
   },
   commands: {
     mode: null,
@@ -162,13 +371,15 @@ export const useOpcUaStore = create<OpcUaState>((set, get) => ({
       set({ loading: true, error: null });
     }
 
+    const { nodeIds, gripperStatusNodeIds } = await buildReadPayload();
+
     try {
       const response = await fetch('/api/opcua/read', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ nodeIds: READ_NODE_ID_LIST }),
+        body: JSON.stringify({ nodeIds }),
       });
 
       const responseText = await response.text();
@@ -317,6 +528,62 @@ export const useOpcUaStore = create<OpcUaState>((set, get) => ({
         return null;
       })();
 
+      const gripperIn1 = (() => {
+        const result = findResult(STATUS_NODE_IDS.gripperIn1);
+        if (result?.statusCode === 'Good') {
+          const booleanValue = parseBoolean(result.value);
+          if (booleanValue !== null) {
+            return booleanValue;
+          }
+          failures.push('GripperIn1: 응답 형식 오류');
+          return null;
+        }
+        if (result) {
+          failures.push(`GripperIn1: ${result.statusCode}`);
+        }
+        return null;
+      })();
+
+      const gripperInternalState = (() => {
+        const nodeId = gripperStatusNodeIds?.internalState;
+        if (!nodeId) {
+          return null;
+        }
+        const result = findResult(nodeId);
+        if (result?.statusCode === 'Good') {
+          const booleanValue = parseBoolean(result.value);
+          if (booleanValue !== null) {
+            return booleanValue;
+          }
+          failures.push('GripperInternalState: 응답 형식 오류');
+          return null;
+        }
+        if (result) {
+          failures.push(`GripperInternalState: ${result.statusCode}`);
+        }
+        return null;
+      })();
+
+      const gripperSyncState = (() => {
+        const nodeId = gripperStatusNodeIds?.syncState;
+        if (!nodeId) {
+          return null;
+        }
+        const result = findResult(nodeId);
+        if (result?.statusCode === 'Good') {
+          const booleanValue = parseBoolean(result.value);
+          if (booleanValue !== null) {
+            return booleanValue;
+          }
+          failures.push('GripperSyncState: 응답 형식 오류');
+          return null;
+        }
+        if (result) {
+          failures.push(`GripperSyncState: ${result.statusCode}`);
+        }
+        return null;
+      })();
+
       const mode = (() => {
         const result = findResult(COMMAND_NODE_IDS.mode);
         if (result?.statusCode === 'Good') {
@@ -422,6 +689,9 @@ export const useOpcUaStore = create<OpcUaState>((set, get) => ({
           motionState,
           commandStatus,
           errorCode,
+          gripperIn1,
+          gripperInternalState,
+          gripperSyncState,
         },
         commands: {
           mode,
@@ -444,6 +714,9 @@ export const useOpcUaStore = create<OpcUaState>((set, get) => ({
           motionState: null,
           commandStatus: null,
           errorCode: null,
+          gripperIn1: null,
+          gripperInternalState: null,
+          gripperSyncState: null,
         },
         commands: {
           mode: null,
@@ -471,6 +744,13 @@ export const useOpcUaStore = create<OpcUaState>((set, get) => ({
         motionState: status.motionState ?? prev.status.motionState,
         commandStatus: status.commandStatus ?? prev.status.commandStatus,
         errorCode: status.errorCode ?? prev.status.errorCode,
+        gripperIn1: typeof status.gripperIn1 === 'boolean' ? status.gripperIn1 : prev.status.gripperIn1,
+        gripperInternalState:
+          typeof status.gripperInternalState === 'boolean'
+            ? status.gripperInternalState
+            : prev.status.gripperInternalState,
+        gripperSyncState:
+          typeof status.gripperSyncState === 'boolean' ? status.gripperSyncState : prev.status.gripperSyncState,
       },
       commands: {
         mode: status.mode ?? prev.commands.mode,
@@ -502,7 +782,6 @@ export const useOpcUaStore = create<OpcUaState>((set, get) => ({
     const velocity = options?.velocity ?? 0;
     const acceleration = options?.acceleration ?? 0;
     const mode = options?.mode ?? 1;
-
     await writeOpcUaNodes([
       {
         nodeId: COMMAND_NODE_IDS.targetJoints,
@@ -571,9 +850,36 @@ export const useOpcUaStore = create<OpcUaState>((set, get) => ({
       },
     ];
 
+    const expectedIn1 = action === 'grip' ? false : true;
+
     await writeOpcUaNodes(requestsOn);
-    await new Promise((resolve) => setTimeout(resolve, durationMs));
-    await writeOpcUaNodes(requestsOff);
+
+    try {
+      const matched = await (async () => {
+        const timeoutMs = 3000;
+        const pollIntervalMs = 150;
+        const start = Date.now();
+
+        while (Date.now() - start < timeoutMs) {
+          await get().fetchStatus({ silent: true });
+          const current = get().status.gripperIn1;
+          if (typeof current === 'boolean' && current === expectedIn1) {
+            return true;
+          }
+          await delay(pollIntervalMs);
+        }
+
+        return false;
+      })();
+
+      if (!matched) {
+        throw new Error('그리퍼 입력(IN1)이 기대 상태로 변하지 않았습니다.');
+      }
+
+      await delay(durationMs);
+    } finally {
+      await writeOpcUaNodes(requestsOff);
+    }
   },
 }));
 

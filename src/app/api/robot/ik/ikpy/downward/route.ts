@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const IKPY_DOWNWARD_ENDPOINT =
-  process.env.ROBOT_IK_IKPY_DOWNWARD_ENDPOINT ??
-  'http://192.168.0.196:53000/api/robot/ik/ikpy/downward';
+import { appConfig } from '@/config';
+
+const IKPY_DOWNWARD_ENDPOINT = appConfig.robotIk.ikpyDownwardEndpoint;
 
 export async function POST(request: NextRequest) {
   try {

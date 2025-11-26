@@ -2,19 +2,21 @@
 
 import { useEffect, useState } from 'react';
 
+import { appConfig } from '@/config';
+
 const ENDPOINTS = [
   {
-    path: '/ws/board_perspective_jpg',
+    path: appConfig.streams.paths.boardPerspective,
     title: 'Board Perspective',
     transformClass: 'rotate-180 -scale-x-100',
   },
-  { path: '/ws/color_jpg', title: 'Color Image' },
-  { path: '/ws/depth_jpg', title: 'Depth Image' },
-  { path: '/ws/aruco_debug_jpg', title: 'ArUco Debug' },
+  { path: appConfig.streams.paths.color, title: 'Color Image' },
+  { path: appConfig.streams.paths.depth, title: 'Depth Image' },
+  { path: appConfig.streams.paths.arucoDebug, title: 'ArUco Debug' },
 ];
 
-const WEBSOCKET_URL_BASE = 'ws://192.168.0.196:53000';
-const RECONNECT_INTERVAL_MS = 1000;
+const WEBSOCKET_URL_BASE = appConfig.streams.wsBase;
+const RECONNECT_INTERVAL_MS = appConfig.streams.reconnectIntervalMs;
 
 const LoadingIndicator = () => (
     <div className="flex items-center justify-center h-full">

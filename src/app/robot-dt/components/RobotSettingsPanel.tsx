@@ -3,9 +3,11 @@
 import { useCallback, ChangeEvent, useMemo } from 'react';
 
 import {
+  GRIP_DEPTH_LIMITS_MM,
   GRIPPER_LENGTH_LIMITS_MM,
   JOINT_ACCELERATION_RANGE,
   JOINT_VELOCITY_RANGE,
+  PREPICK_HEIGHT_LIMITS_MM,
   useRobotControlStore,
 } from '@/stores/robotControlStore';
 import { useOpcUaStore } from '@/stores/opcUaStore';
@@ -93,6 +95,10 @@ export function RobotSettingsPanel() {
   const gripperLengthMm = useRobotControlStore((state) => state.gripperLengthMm);
   const setGripperEnabled = useRobotControlStore((state) => state.setGripperEnabled);
   const setGripperLengthMm = useRobotControlStore((state) => state.setGripperLengthMm);
+  const gripDepthMm = useRobotControlStore((state) => state.gripDepthMm);
+  const setGripDepthMm = useRobotControlStore((state) => state.setGripDepthMm);
+  const prePickHeightMm = useRobotControlStore((state) => state.prePickHeightMm);
+  const setPrePickHeightMm = useRobotControlStore((state) => state.setPrePickHeightMm);
   const setJointAnglesDeg = useRobotControlStore((state) => state.setJointAnglesDeg);
   const jointVelocity = useRobotControlStore((state) => state.jointVelocity);
   const jointAcceleration = useRobotControlStore((state) => state.jointAcceleration);
@@ -118,6 +124,40 @@ export function RobotSettingsPanel() {
       }
     },
     [setGripperLengthMm]
+  );
+
+  const handleGripDepthSliderChange = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      setGripDepthMm(Number(event.target.value));
+    },
+    [setGripDepthMm]
+  );
+
+  const handleGripDepthNumberChange = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      const nextValue = Number(event.target.value);
+      if (!Number.isNaN(nextValue)) {
+        setGripDepthMm(nextValue);
+      }
+    },
+    [setGripDepthMm]
+  );
+
+  const handlePrePickSliderChange = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      setPrePickHeightMm(Number(event.target.value));
+    },
+    [setPrePickHeightMm]
+  );
+
+  const handlePrePickNumberChange = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      const nextValue = Number(event.target.value);
+      if (!Number.isNaN(nextValue)) {
+        setPrePickHeightMm(nextValue);
+      }
+    },
+    [setPrePickHeightMm]
   );
 
   const jointAngles = useOpcUaStore((state) => state.status.currentJoints);
@@ -214,6 +254,90 @@ export function RobotSettingsPanel() {
                 onChange={handleNumberChange}
                 disabled={!gripperEnabled}
                 className="w-28 bg-neutral-900 border border-neutral-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400 disabled:text-neutral-500"
+              />
+              <span className="text-xs text-neutral-500">밀리미터 단위</span>
+            </div>
+          </div>
+        </section>
+
+        <section className="bg-neutral-900/70 border border-neutral-800 rounded-2xl px-4 py-5 shadow-lg shadow-black/10">
+          <header className="flex items-center justify-between">
+            <div className="flex flex-col">
+              <span className="text-sm font-semibold text-neutral-200">그립 깊이 프리셋</span>
+              <p className="text-xs text-neutral-500 mt-1">
+                기본 60&nbsp;mm에서 시작하며, 이후 공정에서 사용할 값을 미리 선택해 둘 수 있습니다.
+              </p>
+            </div>
+            <span className="text-sm text-emerald-300 font-medium">
+              {formatMillimeters(gripDepthMm)}
+            </span>
+          </header>
+          <p className="text-xs text-neutral-500 mt-1">
+            {formatMillimeters(GRIP_DEPTH_LIMITS_MM.min)} ~ {formatMillimeters(GRIP_DEPTH_LIMITS_MM.max)} 범위.
+          </p>
+
+          <div className="mt-4 space-y-3">
+            <input
+              type="range"
+              min={GRIP_DEPTH_LIMITS_MM.min}
+              max={GRIP_DEPTH_LIMITS_MM.max}
+              step={5}
+              value={gripDepthMm}
+              onChange={handleGripDepthSliderChange}
+              className="w-full accent-emerald-500"
+            />
+
+            <div className="flex items-center gap-3">
+              <input
+                type="number"
+                min={GRIP_DEPTH_LIMITS_MM.min}
+                max={GRIP_DEPTH_LIMITS_MM.max}
+                step={1}
+                value={gripDepthMm}
+                onChange={handleGripDepthNumberChange}
+                className="w-28 bg-neutral-900 border border-neutral-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+              />
+              <span className="text-xs text-neutral-500">밀리미터 단위</span>
+            </div>
+          </div>
+        </section>
+
+        <section className="bg-neutral-900/70 border border-neutral-800 rounded-2xl px-4 py-5 shadow-lg shadow-black/10">
+          <header className="flex items-center justify-between">
+            <div className="flex flex-col">
+              <span className="text-sm font-semibold text-neutral-200">집기 전 높이(Pre-pick)</span>
+              <p className="text-xs text-neutral-500 mt-1">
+                물체를 잡기 전에 접근할 기준 높이를 설정합니다.
+              </p>
+            </div>
+            <span className="text-sm text-emerald-300 font-medium">
+              {formatMillimeters(prePickHeightMm)}
+            </span>
+          </header>
+          <p className="text-xs text-neutral-500 mt-1">
+            {formatMillimeters(PREPICK_HEIGHT_LIMITS_MM.min)} ~ {formatMillimeters(PREPICK_HEIGHT_LIMITS_MM.max)} 범위.
+          </p>
+
+          <div className="mt-4 space-y-3">
+            <input
+              type="range"
+              min={PREPICK_HEIGHT_LIMITS_MM.min}
+              max={PREPICK_HEIGHT_LIMITS_MM.max}
+              step={5}
+              value={prePickHeightMm}
+              onChange={handlePrePickSliderChange}
+              className="w-full accent-emerald-500"
+            />
+
+            <div className="flex items-center gap-3">
+              <input
+                type="number"
+                min={PREPICK_HEIGHT_LIMITS_MM.min}
+                max={PREPICK_HEIGHT_LIMITS_MM.max}
+                step={1}
+                value={prePickHeightMm}
+                onChange={handlePrePickNumberChange}
+                className="w-28 bg-neutral-900 border border-neutral-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
               />
               <span className="text-xs text-neutral-500">밀리미터 단위</span>
             </div>

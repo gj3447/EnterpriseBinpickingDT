@@ -2,6 +2,7 @@
 
 import { FormEvent, useMemo, useState } from 'react';
 import { useRobotControlStore } from '@/stores/robotControlStore';
+import { useOpcUaStore } from '@/stores/opcUaStore';
 import { useRobotPoseStore, type RobotPose } from '@/stores/robotPoseStore';
 
 const formatDegrees = (value: number) => `${value > 0 ? '+' : ''}${value.toFixed(2)}°`;
@@ -15,11 +16,14 @@ export function RobotPosePanel() {
   const addPose = useRobotPoseStore((state) => state.addPose);
   const removePose = useRobotPoseStore((state) => state.removePose);
   const clearPoses = useRobotPoseStore((state) => state.clearPoses);
+  const pushTargetJoints = useOpcUaStore((state) => state.pushTargetJoints);
 
   const [poseName, setPoseName] = useState('');
   const [feedback, setFeedback] = useState<string | null>(null);
   const [listOpen, setListOpen] = useState(true);
   const [detailPoseId, setDetailPoseId] = useState<string | null>(null);
+  const [pendingRobotExecution, setPendingRobotExecution] = useState<RobotPose | null>(null);
+  const [executeLoadingId, setExecuteLoadingId] = useState<string | null>(null);
 
   const currentSummary = useMemo(
     () =>
@@ -48,6 +52,29 @@ export function RobotPosePanel() {
     setManualEnabled(true);
     setJointAnglesDeg(pose.jointAnglesDeg);
     setFeedback(`'${pose.name}' 적용됨`);
+  };
+
+  const handleRobotExecute = async (pose: RobotPose) => {
+    setPendingRobotExecution(pose);
+    setExecuteLoadingId(pose.id);
+    try {
+      setManualEnabled(true);
+      setJointAnglesDeg(pose.jointAnglesDeg);
+      const controls = useRobotControlStore.getState();
+      await pushTargetJoints(pose.jointAnglesDeg, {
+        velocity: controls.jointVelocity,
+        acceleration: controls.jointAcceleration,
+        mode: 1,
+      });
+      setFeedback(`'${pose.name}' 실행 완료`);
+    } catch (error) {
+      console.error('[POSE EXECUTE] push failed', error);
+      setFeedback(
+        error instanceof Error ? error.message : '실행 중 오류가 발생했습니다.'
+      );
+    } finally {
+      setExecuteLoadingId(null);
+    }
   };
 
   const toggleDetail = (poseId: string) => {
@@ -106,33 +133,51 @@ export function RobotPosePanel() {
             <div className="flex flex-col gap-2">
               {poses.map((pose) => {
                 const detailOpen = detailPoseId === pose.id;
+                const pendingExecution = pendingRobotExecution?.id === pose.id;
                 return (
-                  <div
+                  <button
                     key={pose.id}
-                    className="rounded-2xl border border-neutral-800/70 bg-neutral-950/40 px-4 py-3"
+                    type="button"
+                    onClick={() => toggleDetail(pose.id)}
+                    className="rounded-2xl border border-neutral-800/70 bg-neutral-950/40 px-4 py-3 text-left transition hover:border-emerald-500/60"
                   >
                     <div className="flex items-center justify-between gap-2">
-                      <span className="truncate text-sm font-semibold text-neutral-100">
-                        {pose.name}
-                      </span>
+                      <div className="flex flex-col">
+                        <span className="truncate text-sm font-semibold text-neutral-100">
+                          {pose.name}
+                        </span>
+                        {pendingExecution && (
+                          <span className="text-[10px] text-emerald-300 uppercase tracking-widest">
+                            실행 대기
+                          </span>
+                        )}
+                      </div>
                       <div className="flex shrink-0 gap-2">
                         <button
                           type="button"
-                          onClick={() => handleApplyPose(pose)}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            handleApplyPose(pose);
+                          }}
                           className="rounded-full border border-emerald-500 bg-emerald-500/80 px-3 py-1 text-[11px] uppercase tracking-widest text-neutral-900 hover:bg-emerald-400"
                         >
                           적용
                         </button>
                         <button
                           type="button"
-                          onClick={() => toggleDetail(pose.id)}
-                          className="rounded-full border border-neutral-700 bg-neutral-900/80 px-3 py-1 text-[11px] uppercase tracking-widest text-neutral-100 hover:bg-neutral-800"
+                          onClick={async (event) => {
+                            event.stopPropagation();
+                            await handleRobotExecute(pose);
+                          }}
+                          disabled={executeLoadingId === pose.id}
+                          className="rounded-full border border-blue-500 bg-blue-500/80 px-3 py-1 text-[11px] uppercase tracking-widest text-neutral-900 hover:bg-blue-400 disabled:opacity-50"
                         >
-                          {detailOpen ? '닫기' : '자세히'}
+                          {executeLoadingId === pose.id ? '실행…' : '실행'}
                         </button>
                         <button
                           type="button"
-                          onClick={() => {
+                          onClick={(event) => {
+                            event.stopPropagation();
                             removePose(pose.id);
                             setFeedback(`'${pose.name}' 삭제됨`);
                             if (detailPoseId === pose.id) {
@@ -152,7 +197,7 @@ export function RobotPosePanel() {
                           .join(' • ')}
                       </div>
                     )}
-                  </div>
+                  </button>
                 );
               })}
             </div>

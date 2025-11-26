@@ -16,15 +16,26 @@ interface RobotPoseState {
   updatePoseName: (id: string, name: string) => void;
   removePose: (id: string) => void;
   clearPoses: () => void;
+  getPoseByName: (name: string) => RobotPose | undefined;
 }
 
 const MAX_POSE_COUNT = 50;
-
-const generateId = () => {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID();
+const normalizePoseName = (value?: string) => value?.trim().toLowerCase() ?? '';
+const sanitizePoseName = (value?: string) => (value ?? '').trim();
+const buildPose = (name: string, jointAnglesDeg: number[]): RobotPose => ({
+  id: name,
+  name,
+  createdAt: Date.now(),
+  jointAnglesDeg,
+});
+const getNextDefaultName = (poses: RobotPose[]) => {
+  let index = poses.length + 1;
+  let candidate = `자세 ${index}`;
+  while (poses.some((pose) => normalizePoseName(pose.name) === normalizePoseName(candidate))) {
+    index += 1;
+    candidate = `자세 ${index}`;
   }
-  return `pose-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+  return candidate;
 };
 
 export const useRobotPoseStore = create<RobotPoseState>()(
@@ -35,31 +46,47 @@ export const useRobotPoseStore = create<RobotPoseState>()(
         const safeAngles = Array.isArray(jointAnglesDeg)
           ? jointAnglesDeg.map((value) => (typeof value === 'number' ? value : 0))
           : [];
-        const poseCount = get().poses.length;
-        const nextName = name?.trim() || `자세 ${poseCount + 1}`;
-        const newPose: RobotPose = {
-          id: generateId(),
-          name: nextName,
-          createdAt: Date.now(),
-          jointAnglesDeg: safeAngles,
-        };
+        const currentPoses = get().poses;
+        const rawName = sanitizePoseName(name);
+        const nextName = rawName.length > 0 ? rawName : getNextDefaultName(currentPoses);
+        const normalized = normalizePoseName(nextName);
+        const newPose = buildPose(nextName, safeAngles);
         set((state) => {
-          const nextPoses = [newPose, ...state.poses].slice(0, MAX_POSE_COUNT);
+          const filtered = state.poses.filter(
+            (pose) => normalizePoseName(pose.name) !== normalized
+          );
+          const nextPoses = [newPose, ...filtered].slice(0, MAX_POSE_COUNT);
           return { poses: nextPoses };
         });
         return newPose;
       },
       updatePoseName: (id, name) =>
-        set((state) => ({
-          poses: state.poses.map((pose) =>
-            pose.id === id ? { ...pose, name: name.trim() || pose.name } : pose
-          ),
-        })),
+        set((state) => {
+          const targetName = sanitizePoseName(name);
+          if (!targetName) {
+            return state;
+          }
+          const normalized = normalizePoseName(targetName);
+          const filtered = state.poses.filter(
+            (pose) =>
+              pose.id === id ||
+              normalizePoseName(pose.name) !== normalized
+          );
+          return {
+            poses: filtered.map((pose) =>
+              pose.id === id ? { ...pose, id: targetName, name: targetName } : pose
+            ),
+          };
+        }),
       removePose: (id) =>
         set((state) => ({
           poses: state.poses.filter((pose) => pose.id !== id),
         })),
       clearPoses: () => set({ poses: [] }),
+      getPoseByName: (name) =>
+        get().poses.find(
+          (pose) => normalizePoseName(pose.name) === normalizePoseName(name)
+        ),
     }),
     {
       name: 'robot-pose-storage',

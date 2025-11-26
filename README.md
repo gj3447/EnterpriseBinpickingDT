@@ -10,7 +10,8 @@
 - **실시간 이미지 뷰어 (`/image-viewer`):** 4개의 개별 웹소켓 스트림(Color, Depth, ArUco Debug, Board Perspective)을 통해 실시간 카메라 피드를 제공합니다. 특히 `Board Perspective` 뷰는 고유한 비율을 유지하며 강조 표시됩니다.
 - **자세 관리 도크:** `Robot DT` 화면 좌측 팝업에서 로봇 관절 각도를 북마크로 저장/적용/삭제할 수 있습니다. 리스트는 토글 방식으로 열고 닫을 수 있으며, 자세별 관절 값은 `자세히` 버튼으로 확인할 수 있습니다.
 - **IKPy 프록시 및 자동 재시도:** 프런트엔드가 `/api/robot/ik/ikpy`·`/api/robot/ik/ikpy/downward` 로 요청을 전송하며, 백엔드가 404를 반환하면 기존 엔드포인트(`/api/robot/ik`, `/api/robot/ik/downward`)로 자동 재시도합니다.
-- **그리퍼 길이 관리:** 기본 그리퍼 길이는 240 mm로 설정되어 있으며, UI에서 값 변경 시 IK 요청에 포함됩니다.
+- **그리퍼 길이 관리:** 기본 그리퍼 길이는 260 mm로 설정되어 있으며, UI에서 값 변경 시 IK 요청에 포함됩니다.
+- **그립 깊이 프리셋:** 앞으로 사용할 픽업 깊이를 기본 60 mm에서 시작해 UI에서 미리 선택해 둘 수 있습니다.
 
 ## 시작하기
 
@@ -45,7 +46,11 @@ yarn dev
 
 ## 환경 변수
 
-프로젝트 루트에 `.env.local` 파일을 생성하고 필요한 환경 변수를 설정하세요.
+프로젝트 루트에 `.env.local` 파일을 생성하고 필요한 환경 변수를 설정하세요. 저장소에는 기본값이 채워진 `.env.local.example` 이 포함되어 있으므로, 아래 명령으로 복사한 뒤 환경에 맞게 수정하면 됩니다.
+
+```bash
+cp .env.local.example .env.local
+```
 
 ```bash
 # IKPy 백엔드 프록시 대상 (필요에 따라 교체)
@@ -58,6 +63,8 @@ ROBOT_IK_IKPY_DOWNWARD_ENDPOINT=http://192.168.0.196:53000/api/robot/ik/ikpy/dow
 ```
 
 프록시 주소를 변경한 경우 개발 서버를 재시작해야 합니다.
+
+IK 서버 요구사항과 RSS API 자격증명, OPC-UA 노드 매핑과 같은 세부 항목은 각각 `docs/robot_ik_api.md`, `docs/robot_ik_usage.md`, `docs/robot-scene-ik-target-analysis.md`, `RSS_API_GUIDE.md`, `opc_tags.md`에서 자세히 다룹니다.
 
 ## 구조 개요
 
@@ -87,7 +94,7 @@ src/
 3. 백엔드가 404를 반환하면 자동으로 `/api/robot/ik` / `/api/robot/ik/downward` 로 재시도.
 4. 성공 시 `best.joint_positions` 값을 라디안에서 도 단위로 변환해 디지털 트윈 상태를 갱신.
 
-`grip_offsets` 는 TCP-플랜지 간 거리(미터)를 담은 스칼라 배열이며, 기본 그리퍼 길이(240 mm)는 자동으로 환산되어 포함됩니다.
+`grip_offsets` 는 TCP-플랜지 간 거리(미터)를 담은 스칼라 배열이며, 기본 그리퍼 길이(260 mm)는 자동으로 환산되어 포함됩니다.
 
 ## 기타 참고
 
@@ -96,3 +103,10 @@ src/
 - 자산(이미지, URDF, YCB 데이터)은 `public/` 디렉터리에 위치하며 Next.js `publicPath` 를 통해 제공됩니다.
 
 필요한 내용이 더 있다면 README와 문서를 계속 업데이트해 주세요.
+
+## 추가 문서
+
+- `docs/robot_ik_api.md`, `docs/robot_ik_usage.md`: IK 프록시와 좌표 체계에 대한 상세 설명
+- `docs/robot-scene-ik-target-analysis.md`: 디지털 트윈 장면과 IK 타깃 매핑 분석
+- `RSS_API_GUIDE.md`: RSS 워크플로 API 및 자격증명 가이드
+- `opc_tags.md`: OPC-UA 노드 트리와 태그 정의

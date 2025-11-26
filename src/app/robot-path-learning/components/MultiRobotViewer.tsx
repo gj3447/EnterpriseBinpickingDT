@@ -5,12 +5,14 @@ import { Canvas, useLoader } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import URDFLoader, { URDFRobot } from 'urdf-loader';
 import { ColladaLoader } from 'three-stdlib';
-import useWebSocket from 'react-use-websocket';
+import useWebSocket, { ReadyState } from 'react-use-websocket';
 import * as THREE from 'three';
 
 import { WebsocketData } from '@/components/dt/types';
 import { Loader } from '@/components/dt/Loader';
 import { RobotScene } from '@/components/dt/RobotScene';
+import { appConfig } from '@/config';
+import { useTransformStore } from '@/stores/transformStore';
 
 const isWebsocketData = (value: unknown): value is WebsocketData => {
     if (!value || typeof value !== 'object') {
@@ -24,21 +26,38 @@ const isWebsocketData = (value: unknown): value is WebsocketData => {
     );
 };
 
+const TRANSFORMS_WS_URL = appConfig.streams.urls.transforms;
+const TRANSFORM_RECONNECT_INTERVAL_MS = appConfig.streams.reconnectIntervalMs;
+
 export function MultiRobotViewer() {
     const [transformData, setTransformData] = useState<WebsocketData | null>(null);
-    const { lastJsonMessage } = useWebSocket('ws://192.168.0.196:53000/ws/transforms_robot', {
+    const { lastJsonMessage, readyState } = useWebSocket(TRANSFORMS_WS_URL, {
         onOpen: () => console.log('WebSocket connection established.'),
         onClose: () => console.log('WebSocket connection closed.'),
         onError: (event) => console.error('WebSocket error:', event),
         shouldReconnect: () => true,
-        reconnectInterval: 1000,
+        reconnectInterval: TRANSFORM_RECONNECT_INTERVAL_MS,
     });
+    const setConnectionState = useTransformStore((state) => state.setConnectionState);
 
     useEffect(() => {
         if (isWebsocketData(lastJsonMessage)) {
             setTransformData(lastJsonMessage);
         }
     }, [lastJsonMessage]);
+
+    useEffect(() => {
+        if (readyState === undefined) {
+            return;
+        }
+        const state =
+            readyState === ReadyState.OPEN
+                ? 'open'
+                : readyState === ReadyState.CLOSED || readyState === ReadyState.CLOSING
+                ? 'closed'
+                : 'connecting';
+        setConnectionState(state);
+    }, [readyState, setConnectionState]);
 
     const robotModel = useLoader<URDFRobot, string>(
       URDFLoader,

@@ -8,15 +8,9 @@ import {
   TimestampsToReturn,
 } from "node-opcua";
 
-const DEFAULT_ENDPOINT =
-  process.env.NODE_ENV === "production"
-    ? "opc.tcp://192.168.0.196:4840/doosan/server/"
-    : "opc.tcp://localhost:4840";
+import { appConfig } from "@/config";
 
-const OPC_UA_ENDPOINT =
-  process.env.OPC_UA_ENDPOINT ??
-  process.env.NEXT_PUBLIC_OPC_UA_ENDPOINT ??
-  DEFAULT_ENDPOINT;
+const OPC_UA_ENDPOINT = appConfig.opcua.endpoint;
 
 type SessionCallback<T> = (session: OPCUASession) => Promise<T>;
 

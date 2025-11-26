@@ -3,6 +3,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import * as THREE from "three";
 
+import { appConfig } from "@/config";
 import type { YcbObjectData } from "@/lib/ycb";
 import { useInferenceStore } from "@/stores/inferenceStore";
 
@@ -19,15 +20,13 @@ interface InferenceSummary {
   mode: InferenceMode;
 }
 
-const MAIN_SERVER_URL =
-  process.env.NEXT_PUBLIC_MAIN_SERVER_URL ?? "http://192.168.0.196:8001";
-const RSS_BASE_URL =
-  process.env.NEXT_PUBLIC_RSS_BASE ?? "http://192.168.0.197:51000";
-const STREAM_WS_BASE =
-  process.env.NEXT_PUBLIC_STREAM_WS_BASE ?? "ws://192.168.0.196:53000";
+const MAIN_SERVER_URL = appConfig.ycb.mainServerUrl;
+const RSS_BASE_URL = appConfig.ycb.rssBaseUrl;
+const STREAM_WS_BASE = appConfig.streams.wsBase;
 
-const BOARD_PERSPECTIVE_ENDPOINT = "/ws/board_perspective_jpg";
-const RECONNECT_INTERVAL_MS = 1000;
+const BOARD_PERSPECTIVE_ENDPOINT = appConfig.streams.paths.boardPerspective;
+const RECONNECT_INTERVAL_MS = appConfig.streams.reconnectIntervalMs;
+const LOG_PREVIEW_LIMIT = 20000;
 
 type ConnectionState = "connecting" | "open" | "closed";
 type InferenceMode = "full" | "fast";
@@ -178,6 +177,9 @@ export function YcbObjectViewer({ objects, variant = "page" }: YcbObjectViewerPr
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [inferenceSummary, setInferenceSummary] = useState<InferenceSummary | null>(null);
   const [lastResponse, setLastResponse] = useState<string | null>(null);
+  const [lastResponseTimestamp, setLastResponseTimestamp] = useState<number | null>(null);
+  const [logExpanded, setLogExpanded] = useState(false);
+  const [logDownloadUrl, setLogDownloadUrl] = useState<string | null>(null);
   const [inferenceMode, setInferenceMode] = useState<InferenceMode>("full");
 
   const upsertInference = useInferenceStore((state) => state.upsertInference);
@@ -209,6 +211,42 @@ export function YcbObjectViewer({ objects, variant = "page" }: YcbObjectViewerPr
     return () => window.clearInterval(interval);
   }, [imageCount, selectedObject, variant]);
 
+  useEffect(() => {
+    if (!lastResponse) {
+      setLogDownloadUrl(null);
+      return;
+    }
+    const blob = new Blob([lastResponse], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    setLogDownloadUrl(url);
+    return () => {
+      URL.revokeObjectURL(url);
+    };
+  }, [lastResponse]);
+
+  const logPreviewText = useMemo(() => {
+    if (!lastResponse) {
+      return '';
+    }
+    if (logExpanded || lastResponse.length <= LOG_PREVIEW_LIMIT) {
+      return lastResponse;
+    }
+    return `${lastResponse.slice(0, LOG_PREVIEW_LIMIT)}\n... (미리보기 생략됨)`;
+  }, [lastResponse, logExpanded]);
+
+  const isPreviewTruncated = Boolean(lastResponse && !logExpanded && lastResponse.length > LOG_PREVIEW_LIMIT);
+
+  const logFileName = useMemo(() => {
+    if (!lastResponseTimestamp) {
+      return 'ycb-response.json';
+    }
+    try {
+      return `ycb-response-${new Date(lastResponseTimestamp).toISOString()}.json`;
+    } catch {
+      return 'ycb-response.json';
+    }
+  }, [lastResponseTimestamp]);
+
   const currentImage = selectedObject && imageCount > 0
     ? selectedObject.images[currentIndex % imageCount]
     : null;
@@ -233,6 +271,8 @@ export function YcbObjectViewer({ objects, variant = "page" }: YcbObjectViewerPr
     setErrorMessage(null);
     setInferenceSummary(null);
     setLastResponse(null);
+    setLastResponseTimestamp(null);
+    setLogExpanded(false);
 
     try {
       const outputMode = inferenceMode === "fast" ? "none" : "full";
@@ -288,6 +328,8 @@ export function YcbObjectViewer({ objects, variant = "page" }: YcbObjectViewerPr
                 })()
               : "응답 본문이 없습니다."
         );
+        setLastResponseTimestamp(Date.now());
+        setLogExpanded(false);
         throw new Error(`HTTP ${response.status}`);
       }
 
@@ -307,6 +349,8 @@ export function YcbObjectViewer({ objects, variant = "page" }: YcbObjectViewerPr
               }
             })()
       );
+      setLastResponseTimestamp(Date.now());
+      setLogExpanded(false);
       const meshPath = `/meshs/${selectedObject.name}.obj`;
 
       const convertRotationCandidateToQuaternion = (
@@ -770,18 +814,39 @@ export function YcbObjectViewer({ objects, variant = "page" }: YcbObjectViewerPr
         </section>
 
         {lastResponse !== null && lastResponse.length > 0 && (
-          <section className="bg-neutral-900/70 border border-neutral-800 rounded-2xl shadow-lg px-6 py-5">
-            <div className="flex items-center justify-between mb-3">
+          <section className="bg-neutral-900/70 border border-neutral-800 rounded-2xl shadow-lg px-6 py-5 space-y-3">
+            <div className="flex items-center justify-between">
               <h2 className="text-sm font-semibold uppercase tracking-widest text-neutral-300">
                 최근 API 응답(JSON)
               </h2>
               <span className="text-xs text-neutral-500">최신 호출 기준</span>
             </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setLogExpanded((prev) => !prev)}
+                className="rounded-full border border-neutral-600 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-neutral-200 hover:border-neutral-400 transition-colors"
+              >
+                {logExpanded ? '간략히 보기' : '전체 펼치기'}
+              </button>
+              {logDownloadUrl && (
+                <a
+                  href={logDownloadUrl}
+                  download={logFileName}
+                  className="rounded-full border border-emerald-500/70 bg-emerald-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-emerald-200 hover:border-emerald-400 transition-colors"
+                >
+                  JSON 다운로드
+                </a>
+              )}
+            </div>
             <pre className="whitespace-pre-wrap break-all text-xs bg-neutral-950 p-3 rounded-lg border border-neutral-800 overflow-x-auto">
-{lastResponse.length > 120000
-  ? `${lastResponse.slice(0, 120000)}\n... (출력 길이 제한 120,000자 초과)`
-  : lastResponse}
+{logPreviewText}
             </pre>
+            {isPreviewTruncated && (
+              <p className="text-xs text-neutral-500">
+                전체 {lastResponse.length.toLocaleString()}자 중 상위 {LOG_PREVIEW_LIMIT.toLocaleString()}자만 미리보기로 표시했습니다.
+              </p>
+            )}
           </section>
         )}
       </div>

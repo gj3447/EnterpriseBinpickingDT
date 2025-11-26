@@ -27,11 +27,29 @@ export const JOINT_LIMITS_DEG = JOINT_LIMITS_RAD.map((limit) => ({
 
 const GRIPPER_LENGTH_MIN_MM = 0;
 const GRIPPER_LENGTH_MAX_MM = 300;
-const GRIPPER_LENGTH_DEFAULT_MM = 240;
+const GRIPPER_LENGTH_DEFAULT_MM = 260;
 
 export const GRIPPER_LENGTH_LIMITS_MM = {
   min: GRIPPER_LENGTH_MIN_MM,
   max: GRIPPER_LENGTH_MAX_MM,
+};
+
+const GRIP_DEPTH_MIN_MM = 0;
+const GRIP_DEPTH_MAX_MM = 200;
+const GRIP_DEPTH_DEFAULT_MM = 60;
+
+export const GRIP_DEPTH_LIMITS_MM = {
+  min: GRIP_DEPTH_MIN_MM,
+  max: GRIP_DEPTH_MAX_MM,
+};
+
+const PREPICK_HEIGHT_MIN_MM = 0;
+const PREPICK_HEIGHT_MAX_MM = 300;
+const PREPICK_HEIGHT_DEFAULT_MM = 120;
+
+export const PREPICK_HEIGHT_LIMITS_MM = {
+  min: PREPICK_HEIGHT_MIN_MM,
+  max: PREPICK_HEIGHT_MAX_MM,
 };
 
 export const BOARD_EXTENT_X = 0.8;
@@ -52,6 +70,8 @@ export interface RobotControlState {
   jointAnglesDeg: number[];
   gripperEnabled: boolean;
   gripperLengthMm: number;
+  gripDepthMm: number;
+  prePickHeightMm: number;
   ikEnabled: boolean;
   ikDownwardMode: boolean;
   ikOffsetX: number;
@@ -70,6 +90,8 @@ export interface RobotControlState {
   resetJointAngles: () => void;
   setGripperEnabled: (enabled: boolean) => void;
   setGripperLengthMm: (length: number) => void;
+  setGripDepthMm: (depth: number) => void;
+  setPrePickHeightMm: (height: number) => void;
   setIkEnabled: () => void;
   setIkDownwardMode: (enabled: boolean) => void;
   setIkOffsetX: (value: number) => void;
@@ -92,6 +114,8 @@ export const useRobotControlStore = create<RobotControlState>((set) => ({
   jointAnglesDeg: initialAngles,
   gripperEnabled: false,
   gripperLengthMm: GRIPPER_LENGTH_DEFAULT_MM,
+  gripDepthMm: GRIP_DEPTH_DEFAULT_MM,
+  prePickHeightMm: PREPICK_HEIGHT_DEFAULT_MM,
   ikEnabled: true,
   ikDownwardMode: true,
   ikOffsetX: 0,
@@ -146,6 +170,26 @@ export const useRobotControlStore = create<RobotControlState>((set) => ({
       const clamped = clamp(length, GRIPPER_LENGTH_MIN_MM, GRIPPER_LENGTH_MAX_MM);
       return {
         gripperLengthMm: clamped,
+      };
+    }),
+  setGripDepthMm: (depth) =>
+    set((state) => {
+      if (Number.isNaN(depth)) {
+        return state;
+      }
+      const clamped = clamp(depth, GRIP_DEPTH_MIN_MM, GRIP_DEPTH_MAX_MM);
+      return {
+        gripDepthMm: clamped,
+      };
+    }),
+  setPrePickHeightMm: (height) =>
+    set((state) => {
+      if (Number.isNaN(height)) {
+        return state;
+      }
+      const clamped = clamp(height, PREPICK_HEIGHT_MIN_MM, PREPICK_HEIGHT_MAX_MM);
+      return {
+        prePickHeightMm: clamped,
       };
     }),
   setIkEnabled: () => undefined,

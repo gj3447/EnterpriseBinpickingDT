@@ -3,6 +3,7 @@ import { Euler, MathUtils, Quaternion, Vector3 } from 'three';
 import {
   useRobotControlStore,
   radiansToDegrees,
+  degreesToRadians,
   IK_OFFSET_LIMIT_X,
   IK_OFFSET_LIMIT_Z,
   IK_OFFSET_Y_MIN,
@@ -35,6 +36,7 @@ export async function performIkAutoSolve(): Promise<IkAutoSolveResult> {
     ikEulerYawDeg,
     gripperLengthMm,
     ikWorldPosition,
+    jointAnglesDeg,
     setJointAnglesDeg,
     setManualEnabled,
     setGripperEnabled,
@@ -77,6 +79,10 @@ export async function performIkAutoSolve(): Promise<IkAutoSolveResult> {
   const rawGripperLengthMm = gripperLengthMm ?? 0;
   const gripperOffsetMeters = Number((Math.max(0, rawGripperLengthMm) / 1000).toFixed(4));
   const gripOffsets: [number] = [gripperOffsetMeters];
+  const initialJointPositions =
+    Array.isArray(jointAnglesDeg) && jointAnglesDeg.length > 0
+      ? jointAnglesDeg.map((deg) => degreesToRadians(deg))
+      : undefined;
 
   let endpoint = '/api/robot/ik/ikpy';
   let fallbackEndpoint: string | null = null;
@@ -120,6 +126,13 @@ export async function performIkAutoSolve(): Promise<IkAutoSolveResult> {
       mode: 'auto',
     };
     fallbackEndpoint = '/api/robot/ik';
+  }
+
+  if (initialJointPositions && initialJointPositions.length > 0) {
+    payload = {
+      ...payload,
+      initial_joint_positions: initialJointPositions,
+    };
   }
 
   const requestLogObject = {
@@ -182,8 +195,8 @@ export async function performIkAutoSolve(): Promise<IkAutoSolveResult> {
     throw new Error('IK 결과에 관절 값이 포함되어 있지 않습니다.');
   }
 
-  const jointAnglesDeg = jointPositions.slice(0, 6).map((value) => radiansToDegrees(value));
-  setJointAnglesDeg(jointAnglesDeg);
+  const solvedJointAnglesDeg = jointPositions.slice(0, 6).map((value) => radiansToDegrees(value));
+  setJointAnglesDeg(solvedJointAnglesDeg);
   setManualEnabled(true);
 
   if (jointPositions.length > 6) {

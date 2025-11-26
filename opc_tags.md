@@ -50,22 +50,22 @@ Objects (i=85)
    │  └─ ErrorCode (ns=2;i=16)
    ├─ Commands (ns=2;i=3)
    │  ├─ Custom (ns=2;i=9)
-   │  ├─ TargetJoints (ns=2;i=50)
-   │  ├─ TargetTCP (ns=2;i=51)
-   │  ├─ Mode (ns=2;i=52)
-   │  ├─ JVel (ns=2;i=53)
-   │  ├─ JAcc (ns=2;i=54)
-   │  ├─ LVel (ns=2;i=55)
-   │  ├─ LAcc (ns=2;i=56)
-   │  └─ Trigger (ns=2;i=57)
+   │  ├─ TargetJoints (ns=2;i=52)
+   │  ├─ TargetTCP (ns=2;i=53)
+   │  ├─ Mode (ns=2;i=54)
+   │  ├─ JVel (ns=2;i=55)
+   │  ├─ JAcc (ns=2;i=56)
+   │  ├─ LVel (ns=2;i=57)
+   │  ├─ LAcc (ns=2;i=58)
+   │  └─ Trigger (ns=2;i=59)
    ├─ Gripper (ns=2;i=4)
    │  ├─ Status (ns=2;i=5)
    │  │  ├─ In1 (ns=2;i=17)
    │  │  ├─ In2 (ns=2;i=18)
    │  │  └─ In3 (ns=2;i=19)
    │  └─ Commands (ns=2;i=6)
-   │     ├─ Open (ns=2;i=58)
-   │     └─ Close (ns=2;i=59)
+   │     ├─ Open (ns=2;i=60)
+   │     └─ Close (ns=2;i=61)
    └─ ModbusConnection (ns=2;i=7)
       ├─ Connected (ns=2;i=44)
       ├─ LastDisconnectTime (ns=2;i=45)
@@ -747,22 +747,22 @@ Objects (i=85)
       - ErrorCode (ns=2;i=16)
     - Commands (ns=2;i=3)
       - Custom (ns=2;i=9)
-      - TargetJoints (ns=2;i=50)
-      - TargetTCP (ns=2;i=51)
-      - Mode (ns=2;i=52)
-      - JVel (ns=2;i=53)
-      - JAcc (ns=2;i=54)
-      - LVel (ns=2;i=55)
-      - LAcc (ns=2;i=56)
-      - Trigger (ns=2;i=57)
+      - TargetJoints (ns=2;i=52)
+      - TargetTCP (ns=2;i=53)
+      - Mode (ns=2;i=54)
+      - JVel (ns=2;i=55)
+      - JAcc (ns=2;i=56)
+      - LVel (ns=2;i=57)
+      - LAcc (ns=2;i=58)
+      - Trigger (ns=2;i=59)
     - Gripper (ns=2;i=4)
       - Status (ns=2;i=5)
         - In1 (ns=2;i=17)
         - In2 (ns=2;i=18)
         - In3 (ns=2;i=19)
       - Commands (ns=2;i=6)
-        - Open (ns=2;i=58)
-        - Close (ns=2;i=59)
+        - Open (ns=2;i=60)
+        - Close (ns=2;i=61)
     - ModbusConnection (ns=2;i=7)
       - Connected (ns=2;i=44)
       - LastDisconnectTime (ns=2;i=45)
@@ -799,14 +799,14 @@ Objects (i=85)
 
 | Browse Name | NodeId | 타입 | 접근 | 설명 |
 | --- | --- | --- | --- | --- |
-| TargetJoints | `ns=2;i=50` | Double[6] | R/W | moveJ 목표 각도 |
-| TargetTCP | `ns=2;i=51` | Double[6] | R/W | moveL 목표 TCP |
-| Mode | `ns=2;i=52` | Int32 | R/W | `1=moveJ`, `2=moveL` |
-| JVel | `ns=2;i=53` | Double | R/W | moveJ 속도 |
-| JAcc | `ns=2;i=54` | Double | R/W | moveJ 가속도 |
-| LVel | `ns=2;i=55` | Double | R/W | moveL 속도 |
-| LAcc | `ns=2;i=56` | Double | R/W | moveL 가속도 |
-| Trigger | `ns=2;i=57` | Int32 | R/W | 모션 트리거 (`1` → 실행, 자동 `0`) |
+| TargetJoints | `ns=2;i=52` | Double[6] | R/W | moveJ 목표 각도 |
+| TargetTCP | `ns=2;i=53` | Double[6] | R/W | moveL 목표 TCP |
+| Mode | `ns=2;i=54` | Int32 | R/W | `1=moveJ`, `2=moveL` |
+| JVel | `ns=2;i=55` | Double | R/W | moveJ 속도 |
+| JAcc | `ns=2;i=56` | Double | R/W | moveJ 가속도 |
+| LVel | `ns=2;i=57` | Double | R/W | moveL 속도 |
+| LAcc | `ns=2;i=58` | Double | R/W | moveL 가속도 |
+| Trigger | `ns=2;i=59` | Int32 | R/W | 모션 트리거 (`1` → 실행, 자동 `0`) |
 
 > Commands/Custom(`ns=2;i=9`)은 확장용 폴더로 현재는 비어 있습니다.
 
@@ -817,8 +817,8 @@ Objects (i=85)
 | Status/In1 | `ns=2;i=17` | Boolean | R | 입력 신호 1 |
 | Status/In2 | `ns=2;i=18` | Boolean | R | 입력 신호 2 |
 | Status/In3 | `ns=2;i=19` | Boolean | R | 입력 신호 3 |
-| Commands/Open | `ns=2;i=58` | Boolean | R/W | 출력 1 (일반적으로 오픈) |
-| Commands/Close | `ns=2;i=59` | Boolean | R/W | 출력 2 (일반적으로 클로즈) |
+| Commands/Open | `ns=2;i=60` | Boolean | R/W | 출력 1 (일반적으로 오픈) |
+| Commands/Close | `ns=2;i=61` | Boolean | R/W | 출력 2 (일반적으로 클로즈) |
 
 ### ModbusConnection 폴더 (`ns=2;i=7`)
 
